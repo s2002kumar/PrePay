@@ -21,6 +21,11 @@ dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
     "ruff>=0.8",
+    "sqlfluff>=4.0",
+]
+transform = [
+    "dbt-core>=1.12",
+    "dbt-duckdb>=1.11",
 ]
 
 [build-system]
@@ -31,7 +36,7 @@ build-backend = "hatchling.build"
 packages = ["src/prepay"]
 
 [tool.uv]
-default-groups = ["dev"]
+default-groups = ["dev", "transform"]
 
 # ---------------------------------------------------------------- ruff
 [tool.ruff]
@@ -66,6 +71,11 @@ packages = ["prepay"]
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+# dbt's in-process Python API is untyped; every call into it is confined to this module.
+module = ["prepay.transform"]
+disallow_untyped_calls = false
 
 [[tool.mypy.overrides]]
 # pyarrow ships no type information; its values are treated as Any at our thin I/O boundary.

@@ -1,0 +1,26 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: >
+      Immutable bronze Parquet written by `prepay ingest`: SFLLD fields exactly as received
+      (strings) plus _source_file, _source_row and the _violations bitmask. Hive partitions
+      release and vintage come from the directory layout.
+    meta:
+      external_location: >-
+        read_parquet('{{ env_var("PREPAY_BRONZE") }}/sflld/*/*/{name}.parquet',
+        hive_partitioning = true)
+    tables:
+      - name: origination
+        description: One row per origination record (duplicates possible; quarantined downstream).
+      - name: performance
+        description: One row per reported loan-month (duplicates and gaps possible).
+
+  - name: bronze_pmms
+    description: Weekly FRED PMMS observations in percent per year (null = missing observation).
+    meta:
+      external_location: >-
+        read_parquet('{{ env_var("PREPAY_BRONZE") }}/pmms/*/{name}.parquet',
+        hive_partitioning = true)
+    tables:
+      - name: observations

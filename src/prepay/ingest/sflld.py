@@ -1,7 +1,8 @@
 """Stream SFLLD sample archives into immutable bronze Parquet with row-level lineage.
 
-Bronze preserves every field exactly as received (strings), plus ``_source_file`` and
-``_source_row`` (1-based line number in the member). Nothing is typed, imputed or dropped here.
+Bronze preserves every field exactly as received (strings), plus ``_source_file``,
+``_source_row`` (1-based line number in the member) and ``_violations`` (bit ``k-1`` set when
+field ``k`` breaks its documented domain). Nothing is typed, imputed or dropped here.
 Field-domain violations are *counted* for the quality report; loan-level quarantine decisions are
 made downstream in dbt.
 
@@ -29,13 +30,13 @@ import pyarrow.parquet as pq
 
 from prepay.contracts.layout import Layout
 from prepay.contracts.sflld import SAMPLE_ARCHIVE, layouts_for_release, sample_members
-from prepay.contracts.validate import count_violations
+from prepay.contracts.validate import violation_mask
 from prepay.ingest.lock import DataLock, LockedFile
 from prepay.io import atomic_path, read_json, sha256_file, write_json_atomic
 
 log = logging.getLogger(__name__)
 
-INGEST_VERSION = "1"
+INGEST_VERSION = "2"  # 2: adds the _violations bitmask column
 BLOCK_BYTES = 8 << 20
 MAX_REPORTED_LINES = 20
 
@@ -63,7 +64,7 @@ def bronze_dir(bronze_root: Path, release: int, vintage: int) -> Path:
 def bronze_schema(layout: Layout) -> pa.Schema:
     return pa.schema(
         [(name, pa.string()) for name in layout.column_names]
-        + [("_source_file", pa.string()), ("_source_row", pa.int64())]
+        + [("_source_file", pa.string()), ("_source_row", pa.int64()), ("_violations", pa.int64())]
     )
 
 
@@ -123,12 +124,19 @@ def stream_member(
                 count = batch.num_rows
                 lines = _source_lines(ordinal, count, sorted(m for m in malformed if m > 0))
                 ordinal += count
-                for name in layout.column_names:
-                    stats.violations[name] += count_violations(
-                        layout.field(name), batch.column(name)
+                bitmask = np.zeros(count, dtype=np.int64)
+                for spec in layout.fields:
+                    bad = violation_mask(spec, batch.column(spec.name)).to_numpy(
+                        zero_copy_only=False
                     )
+                    stats.violations[spec.name] += int(bad.sum())
+                    bitmask |= bad.astype(np.int64) << (spec.position - 1)
                 columns = [batch.column(n) for n in layout.column_names]
-                columns += [pa.array([member] * count, pa.string()), pa.array(lines)]
+                columns += [
+                    pa.array([member] * count, pa.string()),
+                    pa.array(lines),
+                    pa.array(bitmask),
+                ]
                 writer.write_batch(pa.record_batch(columns, schema=schema))
                 stats.rows += count
     except pa.ArrowInvalid as exc:

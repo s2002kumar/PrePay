@@ -96,6 +96,21 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_transform(args: argparse.Namespace) -> int:
+    from prepay.ingest.lock import read_lock
+    from prepay.transform import run_dbt, warehouse_path
+
+    started = time.perf_counter()
+    run_dbt(Path(args.data_root), read_lock(Path(args.lock)), command=args.dbt_command)
+    _emit(
+        {
+            "warehouse": warehouse_path(Path(args.data_root)).as_posix(),
+            "seconds": round(time.perf_counter() - started, 2),
+        }
+    )
+    return 0
+
+
 def _cmd_rates_fetch(args: argparse.Namespace) -> int:
     from prepay.ingest.lock import PMMS_SERIES
     from prepay.ingest.pmms import fetch_series
@@ -179,6 +194,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ingest.add_argument("--allow-malformed", action="store_true")
     ingest.set_defaults(handler=_cmd_ingest)
+
+    transform = sub.add_parser(
+        "transform",
+        help="build silver/gold tables with dbt and run every data test",
+        description=(
+            "Runs the dbt project in transform/ on <data-root>/bronze into "
+            "<data-root>/warehouse/prepay.duckdb. The performance cutoff comes from the lock."
+        ),
+    )
+    transform.add_argument("--data-root", required=True)
+    transform.add_argument("--lock", required=True)
+    transform.add_argument("--dbt-command", default="build", choices=["build", "run", "test"])
+    transform.set_defaults(handler=_cmd_transform)
 
     rates = sub.add_parser("rates", help="public mortgage-rate series")
     rates_sub = rates.add_subparsers(dest="rates_command", required=True)

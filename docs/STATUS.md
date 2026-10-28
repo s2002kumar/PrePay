@@ -20,7 +20,7 @@ Last updated: 2026-10-28.
 |---|---|---|---|---|
 | P1 | Source schema + provenance | IMPLEMENTED-SYNTHETIC | `src/prepay/contracts/`, `src/prepay/ingest/`, ADR 0002, `tests/integration/test_ingest.py` | Layout header-verified against official files; data lock + checksums + byte-exact bronze lineage; pre-R47 fallback BLOCKED (no official layout artifact); real-file verification BLOCKED on data |
 | P2 | Deterministic, idempotent pipelines | IMPLEMENTED-SYNTHETIC (ingest) | `test_rerun_reuses_outputs_and_detects_tampering`; byte-identical bronze on rerun | dbt/model stages not built yet |
-| P3 | Point-in-time 3-state targets | NOT BUILT | — | — |
+| P3 | Point-in-time 3-state targets | IMPLEMENTED-SYNTHETIC | `transform/`, ADR 0003, `tests/integration/test_transform.py` (SQL = independent Python oracle; features reproduce generator truth < 1e-9; leakage/chronology guards proven to fail on corrupted data) | Real-data counts for date-mismatch and unexplained-end rules pending data |
 | P4 | Reproducible trained models | NOT BUILT | — | — |
 | P5 | Sealed future holdouts | NOT BUILT | — | Real holdouts blocked on data |
 | P6 | Cash-flow conventions + conservation | IMPLEMENTED-SYNTHETIC (partial) | `make test-finance`; ADR 0001 | §6.7 rate-shock invariance awaits the scenario layer; §6.9 rep-line error table not yet published |
@@ -35,7 +35,7 @@ Last updated: 2026-10-28.
 |---|---|---|
 | M0 Foundations | IN PROGRESS | Tooling, CI, finance core with oracle, source contract, seeded synthetic generator with ground truth and documented anomalies (`docs/SYNTHETIC_DATA.md`); ingest, dbt and the end-to-end synthetic CI path are next |
 | M1 Ingest + provenance | IMPLEMENTED-SYNTHETIC | Streaming ZIP to bronze Parquet, data lock, FRED PMMS ingest + local fetch, per-field violation counts; real-data run BLOCKED on data |
-| M2 Feature store | NOT BUILT | |
+| M2 Feature store | IN PROGRESS | dbt staging/intermediate/marts with quarantine, events, at-risk panel and as-of features; Python scenario feature state machine + parity next |
 | M3 ML | NOT BUILT | |
 | M4 Finance engine + freeze | NOT BUILT | Engine core exists (see P6); cohort study and sealing not built |
 | M5 Product + publication | NOT BUILT | |
