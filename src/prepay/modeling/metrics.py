@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 
 from prepay.arrays import FloatArray, IntArray
-from prepay.features.panel import PanelBatch
+from prepay.features.batch import PanelBatch
 from prepay.finance.amortization import contractual_month
 from prepay.finance.rates import cpr_from_smm
 

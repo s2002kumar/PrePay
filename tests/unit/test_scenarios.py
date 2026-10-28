@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 
 from prepay import periods
+from prepay.features.batch import PanelBatch
 from prepay.features.machine import RatePath
-from prepay.features.panel import PanelBatch
 from prepay.finance import CreditAssumptions, conservation_residuals
 from prepay.scenarios.pools import DEMO_AS_OF, DEMO_POOL_SPECS, demo_pool, demo_pools
 from prepay.scenarios.projection import compare, project_pool

@@ -20,7 +20,7 @@ from typing import Any, ClassVar
 import numpy as np
 
 from prepay.arrays import FloatArray, IntArray
-from prepay.features.panel import PanelBatch
+from prepay.features.batch import PanelBatch
 from prepay.finance.rates import psa_smm
 from prepay.modeling.design import Preprocessor
 

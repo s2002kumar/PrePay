@@ -27,8 +27,9 @@ import numpy as np
 
 from prepay import periods
 from prepay.arrays import FloatArray, IntArray
+from prepay.features.batch import PanelBatch
 from prepay.features.machine import LoanStatics, RatePath, compute_features
-from prepay.features.panel import PanelBatch, load_statics
+from prepay.features.panel import load_statics
 
 CENSOR_BEFORE = (
     "censor_modification",

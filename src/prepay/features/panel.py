@@ -8,7 +8,6 @@ can sample whole loans deterministically (stable hash of the loan ID), never ind
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 import duckdb
@@ -17,23 +16,11 @@ import numpy.typing as npt
 import pyarrow as pa
 
 from prepay.arrays import FloatArray, IntArray
+from prepay.features.batch import PanelBatch
 from prepay.features.machine import LoanStatics, ObjectArray, RatePath
 from prepay.features.spec import CATEGORICAL, FEATURES, NUMERIC
 
 LOAN_HASH_BUCKETS = 10_000
-
-
-@dataclass(frozen=True, slots=True)
-class PanelBatch:
-    loan_id: ObjectArray
-    target_month: IntArray
-    outcome_class: IntArray  # 0 = active, 1 = voluntary payoff, 2 = credit disposition
-    exposure_upb: FloatArray
-    features: dict[str, npt.NDArray[np.float64] | ObjectArray]
-
-    @property
-    def rows(self) -> int:
-        return int(self.target_month.shape[0])
 
 
 def _numeric(column: pa.ChunkedArray) -> FloatArray:

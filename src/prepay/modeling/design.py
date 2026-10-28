@@ -13,7 +13,7 @@ import numpy as np
 from scipy.interpolate import BSpline
 
 from prepay.arrays import FloatArray
-from prepay.features.panel import PanelBatch
+from prepay.features.batch import PanelBatch
 from prepay.features.spec import CATEGORICAL, NUMERIC
 
 SPLINE_FEATURES = ("loan_age", "incentive_bps", "burnout_months")

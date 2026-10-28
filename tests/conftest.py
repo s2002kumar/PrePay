@@ -58,3 +58,26 @@ def built(
     ingest_all(tiny_dataset / "raw", lock, root / "bronze")
     run_dbt(root, lock)
     return root, lock
+
+
+@pytest.fixture(scope="session")
+def demo_bundle(
+    built: tuple[pathlib.Path, DataLock],
+    tiny_dataset: pathlib.Path,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> pathlib.Path:
+    """A verified demo bundle assembled from the tiny synthetic pipeline (fast settings)."""
+    from prepay.api.bundle import assemble_bundle
+    from prepay.modeling.lockbox import evaluate_lockbox, seal
+    from prepay.modeling.train import TrainingConfig, train
+
+    root, lock = built
+    config = TrainingConfig(logistic_c_grid=(0.1,), gbm_num_leaves_grid=(7,), gbm_max_rounds=80)
+    run_dir = train(
+        root, lock, tmp_path_factory.mktemp("demo-runs"), config, truth_dir=tiny_dataset / "truth"
+    )
+    seal(run_dir)
+    evaluate_lockbox(run_dir, root, lock)
+    return assemble_bundle(
+        tmp_path_factory.mktemp("bundle") / "demo", run_dir, root / "bronze", preset="tiny"
+    )

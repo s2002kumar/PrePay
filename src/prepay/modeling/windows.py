@@ -13,7 +13,8 @@ from typing import TYPE_CHECKING, Literal
 import duckdb
 
 from prepay import periods
-from prepay.features.panel import PanelBatch, read_panel
+from prepay.features.batch import PanelBatch
+from prepay.features.panel import read_panel
 
 if TYPE_CHECKING:
     from prepay.modeling.lockbox import Seal

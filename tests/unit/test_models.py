@@ -7,7 +7,7 @@ import json
 import numpy as np
 import pytest
 
-from prepay.features.panel import PanelBatch
+from prepay.features.batch import PanelBatch
 from prepay.features.spec import CATEGORICAL, NUMERIC
 from prepay.modeling.design import Preprocessor
 from prepay.modeling.models import (

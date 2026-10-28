@@ -5,7 +5,7 @@ UV ?= uv
 RUN := $(UV) run --frozen
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check lint fmt typecheck test test-finance synth data-lock benchmark research seal evaluate-lockbox synthetic-study
+.PHONY: help setup check lint fmt typecheck test test-finance synth data-lock benchmark research seal evaluate-lockbox synthetic-study demo-bundle demo
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -68,3 +68,9 @@ synthetic-study: ## Full research pipeline on fictional data, including the one-
 	$(RUN) prepay train --data-root $(STUDY) --lock $(STUDY)/data.lock.json --out $(STUDY)/runs --truth-dir $(STUDY)/source/truth
 	$(RUN) prepay seal --run "$$(ls -d $(STUDY)/runs/*/ | tail -1)"
 	$(RUN) prepay evaluate-lockbox --run "$$(ls -d $(STUDY)/runs/*/ | tail -1)" --data-root $(STUDY) --lock $(STUDY)/data.lock.json
+
+demo-bundle: ## Build the fictional demo bundle (sealed synthetic-trained run) into build/demo
+	$(RUN) prepay demo build --out build/demo --preset ci
+
+demo: ## Serve the demo API + web UI on http://127.0.0.1:8000 (fictional data only)
+	$(RUN) prepay serve --bundle build/demo --web-dist web/dist

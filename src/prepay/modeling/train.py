@@ -29,7 +29,7 @@ from scipy.optimize import minimize_scalar
 
 from prepay import periods
 from prepay.arrays import FloatArray
-from prepay.features.panel import PanelBatch
+from prepay.features.batch import PanelBatch
 from prepay.ingest.lock import DataLock
 from prepay.io import write_json_atomic
 from prepay.modeling import metrics
