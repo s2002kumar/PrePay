@@ -15,8 +15,8 @@ import numpy as np
 
 from prepay import periods
 from prepay.arrays import FloatArray
+from prepay.features.batch import PanelBatch
 from prepay.features.machine import RatePath, compute_features
-from prepay.features.panel import PanelBatch
 from prepay.finance import (
     CreditAssumptions,
     HazardPaths,
