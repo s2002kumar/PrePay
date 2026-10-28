@@ -5,7 +5,7 @@ UV ?= uv
 RUN := $(UV) run --frozen
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check lint fmt typecheck test test-finance synth data-lock benchmark research seal evaluate-lockbox synthetic-study demo-bundle demo
+.PHONY: help setup check lint fmt typecheck test test-finance synth data-lock benchmark research seal evaluate-lockbox synthetic-study demo-bundle demo publication-check
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -74,3 +74,6 @@ demo-bundle: ## Build the fictional demo bundle (sealed synthetic-trained run) i
 
 demo: ## Serve the demo API + web UI on http://127.0.0.1:8000 (fictional data only)
 	$(RUN) prepay serve --bundle build/demo --web-dist web/dist
+
+publication-check: ## Scan tracked files, history, web build and demo bundle for restricted content
+	$(RUN) prepay publication-check --history --tree web=web/dist --tree demo=build/demo
