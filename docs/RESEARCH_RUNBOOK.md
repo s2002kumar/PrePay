@@ -71,8 +71,8 @@ uv run prepay ingest --raw-dir <raw-dir> --lock configs/data.lock.json --data-ro
   the file can't belong to that release. A dataset whose latest reporting period is earlier than
   the cutoff is also refused, because that is what an older release locked under the wrong
   number looks like. Pass `--allow-early-end` only for a deliberate download of old vintages.
-- Measured on the full Release 48 Standard sample (8.85 GB uncompressed), on a 15.4 GB Windows
-  laptop: about 27 minutes and 417 MiB peak RSS, while other heavy work was running.
+- Ingest streams each member in 8 MiB blocks, so its memory stays well under 1 GiB even for the
+  full sample.
 
 ## 5. Transform to silver/gold (dbt)
 
