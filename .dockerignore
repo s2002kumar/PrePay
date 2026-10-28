@@ -1,0 +1,16 @@
+# Allowlist: only what the image build needs. Everything else (data/, artifacts/, notes/, .git,
+# local environments, build outputs) is excluded by the first rule.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!src/
+!transform/
+!web/
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+**/__pycache__/
+transform/target/
+transform/logs/

@@ -77,7 +77,7 @@ test("methodology defines every metric with a unit", async ({ page }) => {
   const table = page.getByRole("table", { name: /Displayed metrics/ });
   await expect(table).toContainText("Cash weighted-average life");
   await expect(table).toContainText("years");
-  await expect(page.getByText(/Blocked: no lawfully obtained/)).toBeVisible();
+  await expect(page.getByText(/no real-data result is published here/)).toBeVisible();
 });
 
 test("service errors are shown, not hidden", async ({ page }) => {

@@ -40,6 +40,13 @@ is sealed before the one-shot 2020–2021, 2022–2023 and 2024-cutoff holdouts 
 
 ## 5. Synthetic study results (engineering demonstration)
 
+Two synthetic worlds were run through the full protocol, each with its own seal and one-shot
+lockbox. Neither report was edited after opening. The small world (§5.1) is what CI and
+`make synthetic-study` use. The larger world (§5.2) has 8× the loans and no injected anomalies;
+it trains the model that the demo screenshots show.
+
+### 5.1 Small world (`ci` preset, ~6k loans)
+
 Reproduce with `make synthetic-study`; the report lands in
 `data/synthetic/study/runs/<run>/evaluations/first.json`.
 
@@ -81,6 +88,51 @@ What this shows:
 
 On synthetic data, the ground-truth diagnostic (`validation.json → _truth_recovery`) agrees: B2
 recovers the true hazard best (prepay MAE 0.0014 vs a mean hazard of 0.0070).
+
+### 5.2 Larger world (`dev` preset, ~47k loans, clean)
+
+Reproduce with `uv run prepay demo build --out build/demo --preset dev`; the evaluation is in
+`build/demo/model_quality.json` (run `20261028T203803Z-39b423a7`). Same windows, same rule, same
+code as §5.1.
+
+**Selection (validation A, 164,511 rows, 548 payoffs / 27 credit):** B2 0.02308, M1 0.02331,
+B0 0.02418, B1 0.02420. With more data B1's gap to B2 is significant (+0.00112, 95% loan-cluster
+bootstrap [0.00093, 0.00129]), so the rule selected **B2**. Calibration was **not** adopted
+(cross-fitted temperatures 1.004 and 0.990 each made the held-out fold slightly worse).
+
+**Sealed holdout, one-step log loss:**
+
+| Window | Rows | Payoffs / credit | Selected (B2) | B1 | M1 | B0 (PSA) |
+|---|---:|---:|---:|---:|---:|---:|
+| 2020-01..2021-12 | 338,854 | 5,240 / 29 | **0.0783** | 0.0793 | 0.0785 | 0.0887 |
+| 2022-01..2023-12 | 356,645 | 678 / 66 | **0.0145** | 0.0174 | 0.0152 | 0.0166 |
+| 2024-01..2026-06 | 546,851 | 1,407 / 114 | **0.0184** | 0.0216 | 0.0193 | 0.0211 |
+
+Flags: `beats_baselines` true on every window. `log_loss_degradation` true for 2020–2021.
+`prepay_calibration_degradation` false everywhere. CPR-proxy MAE of the selected model was
+0.35–0.88 pp, vs 1.2–2.1 pp for M1 and 2.9–4.7 pp for B1. LightGBM was significantly worse than
+B2 on every window (paired difference CIs all above zero) and significantly better than B1.
+
+**Cohort run-off, 24-month cumulative payoff incidence** (hindsight / as-of-flat):
+
+| Cohort (active at) | Loans | Realized | Selected (B2) | B1 | M1 |
+|---|---:|---:|---:|---:|---:|
+| 2019-12 | 15,100 | 0.338 [0.331, 0.345] | 0.338 / 0.240 | 0.321 / 0.260 | 0.353 / 0.252 |
+| 2021-12 | 13,479 | 0.047 [0.043, 0.050] | 0.045 / 0.161 | 0.153 / 0.220 | 0.087 / 0.190 |
+| 2023-12 | 16,608 | 0.054 [0.051, 0.057] | 0.054 / 0.035 | 0.156 / 0.144 | 0.101 / 0.084 |
+
+Truth recovery (prepay MAE, true mean hazard 0.0071): B2 0.00056, M1 0.00161, B1 0.00279,
+B0 0.00386.
+
+**Read this with one caveat.** The synthetic truth (`src/prepay/synthetic/truth.py`) is a
+multinomial logit built from smooth S-curve, seasoning and burnout terms. B2 is a spline
+multinomial logit, so it is close to correctly specified here, and its win is expected. That
+shows the pipeline can recover a known hazard. It says nothing about whether B2 or LightGBM
+would win on real loans, where the true shape is unknown.
+
+The two worlds also show why the selection rule matters. On ~6k loans the rule couldn't
+distinguish B1 from B2 and kept the simpler model, which then lost. With 8× the data the same
+rule had the evidence to pick B2. The rule wasn't changed between the runs.
 
 ## 6. Financial outcomes and sensitivity
 

@@ -3,6 +3,8 @@
 
 UV ?= uv
 RUN := $(UV) run --frozen
+# Synthetic world for the demo bundle: ci (~6k loans, fast) or dev (~47k loans; README screenshots).
+DEMO_PRESET ?= ci
 
 .DEFAULT_GOAL := help
 .PHONY: help setup check lint fmt typecheck test test-finance synth data-lock benchmark research seal evaluate-lockbox synthetic-study demo-bundle demo publication-check
@@ -70,7 +72,7 @@ synthetic-study: ## Full research pipeline on fictional data, including the one-
 	$(RUN) prepay evaluate-lockbox --run "$$(ls -d $(STUDY)/runs/*/ | tail -1)" --data-root $(STUDY) --lock $(STUDY)/data.lock.json
 
 demo-bundle: ## Build the fictional demo bundle (sealed synthetic-trained run) into build/demo
-	$(RUN) prepay demo build --out build/demo --preset ci
+	$(RUN) prepay demo build --out build/demo --preset $(DEMO_PRESET)
 
 demo: ## Serve the demo API + web UI on http://127.0.0.1:8000 (fictional data only)
 	$(RUN) prepay serve --bundle build/demo --web-dist web/dist

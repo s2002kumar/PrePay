@@ -13,3 +13,15 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      web-dev:
+        dependency-type: development
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

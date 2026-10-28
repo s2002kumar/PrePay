@@ -10,9 +10,17 @@ Last updated: 2026-10-28.
 
 | Blocker | Effect | Owner action |
 |---|---|---|
-| No Freddie Mac SFLLD files on the build machine | All `VALIDATED-REAL-PRIVATE` work (P1 real schema check, P5 holdouts, P7 backtests, real metrics) | Register at Freddie Mac Clarity, download the Standard **sample** files (`sample_YYYY.zip`) locally |
+| Freddie Mac terms review for publication | Real-data results stay private (not in this repository, CI or the demo) | Confirm the terms acceptance date and whether a noncommercial aggregate research report may be published |
 | No code license selected | Repository is public but not open-source licensed | Choose a license (or none) |
 | No hosting approved | P8 deployment / live demo | Approve a host (free tier or paid) |
+
+## Real-data study (private)
+
+The owner supplied the Freddie Mac SFLLD Standard sample (28 vintage archives, 1999–2026) on
+2026-10-28. It is processed only on the owner's machine, outside cloud-synced folders. Raw files,
+derived tables, trained models and real-data results never enter this repository, CI or the demo.
+The study follows a pre-registered plan (ADR 0006). Its review packet is kept privately. Until the
+owner completes a terms review, this file records only process status, never real-data numbers.
 
 ## Acceptance gates (SPEC §4)
 
@@ -25,9 +33,9 @@ Last updated: 2026-10-28.
 | P5 | Sealed future holdouts | IMPLEMENTED-SYNTHETIC (mechanism) | seal + one-shot lockbox; holdout guard tested with a reader spy; tamper and second-evaluation refusals tested | Real holdout evaluation BLOCKED on data |
 | P6 | Cash-flow conventions + conservation | IMPLEMENTED-SYNTHETIC | `make test-finance`; ADR 0001; `docs/validation/FINANCE_ENGINE.md`; all twelve §6 items tested | Event-timing sensitivity not yet published |
 | P7 | Pooled 12/24m backtests | IMPLEMENTED-SYNTHETIC | `src/prepay/evaluation/cohort.py` inside the lockbox; `docs/VALIDATION_REPORT.md` §5 | Real cohorts BLOCKED on data; count-weighted estimand; censoring assumed non-informative by the estimator |
-| P8 | Interactive demo | NOT BUILT | — | Hosting not approved |
-| P9 | Licensed-data boundary | NOT BUILT | — | — |
-| P10 | README, reports, reproducible install | NOT BUILT | — | — |
+| P8 | Interactive demo | IMPLEMENTED-SYNTHETIC (local + Docker) | `src/prepay/api/`, `web/`, ADR 0005; CI `e2e` job (Playwright + axe, 17 tests), `tests/integration/test_api.py` | Hosted deploy BLOCKED on hosting approval |
+| P9 | Licensed-data boundary | IMPLEMENTED-SYNTHETIC | `prepay publication-check` (tracked set in `make check`; history + build outputs in CI `e2e`); synthetic-only bundle loader; allowlist `.dockerignore` | Manual license review needed before any real-data publication |
+| P10 | README, reports, reproducible install | IMPLEMENTED-SYNTHETIC | README, VALIDATION_REPORT (real section BLOCKED), BENCHMARKS, review packets M2/M4/M5, Dockerfile | Clean-clone reproduction recorded in `docs/reviews/M5.md`; real results BLOCKED |
 
 ## Milestones
 
@@ -38,7 +46,7 @@ Last updated: 2026-10-28.
 | M2 Feature store | IMPLEMENTED-SYNTHETIC | dbt silver/gold + Python scenario feature state machine with exact historical parity; benchmark baseline in `docs/BENCHMARKS.md`; reviewer packet `docs/reviews/M2.md` |
 | M3 ML | IMPLEMENTED-SYNTHETIC | Models, validation-only selection, cross-fitted calibration, seal/lockbox; trained only on synthetic data; real training BLOCKED on data |
 | M4 Finance engine + freeze | IMPLEMENTED-SYNTHETIC | Engine, scenarios, pools, projection, seal/lockbox with cohort backtests; reviewer packet `docs/reviews/M4.md`; real freeze/holdout BLOCKED on data |
-| M5 Product + publication | NOT BUILT | |
+| M5 Product + publication | IMPLEMENTED-SYNTHETIC | API, web UI, publication gate, Docker image, security policy; reviewer packet `docs/reviews/M5.md`; hosted deploy BLOCKED on approval |
 
 ## Finance verification detail (FINANCIAL_CONVENTIONS §6)
 

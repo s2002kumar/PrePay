@@ -23,6 +23,12 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _current_umask() -> int:
+    mask = os.umask(0o022)
+    os.umask(mask)
+    return mask
+
+
 @contextlib.contextmanager
 def atomic_path(target: Path) -> Iterator[Path]:
     """Yield a temporary sibling path; on success fsync it and atomically rename onto ``target``.
@@ -34,6 +40,8 @@ def atomic_path(target: Path) -> Iterator[Path]:
     fd, tmp_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
     os.close(fd)
     tmp = Path(tmp_name)
+    # mkstemp creates 0600 files; published outputs get ordinary umask-based permissions.
+    os.chmod(tmp, 0o666 & ~_current_umask())
     try:
         yield tmp
         with tmp.open("rb+") as handle:
