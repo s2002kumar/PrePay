@@ -240,13 +240,12 @@ def create_app(
         app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
         index = static_dir / "index.html"
 
+        # Client-side routes all render index.html; hashed assets come only from the mount above.
+        # No filesystem path is ever built from the request path.
         @app.get("/{path:path}", include_in_schema=False)
         def spa(path: str) -> Response:
             if path.startswith("api/"):
                 return error(404, "not_found", "unknown API route")
-            candidate = (static_dir / path).resolve()
-            if path and candidate.is_file() and static_dir.resolve() in candidate.parents:
-                return FileResponse(candidate)
             return FileResponse(index)
 
     return app
