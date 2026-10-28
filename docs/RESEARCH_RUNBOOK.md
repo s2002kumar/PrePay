@@ -68,4 +68,17 @@ uv run prepay ingest --raw-dir <raw-dir> --lock configs/data.lock.json --data-ro
 - `<data-root>/bronze/_ingest_summary.json` reports row counts, malformed rows and per-field
   domain violations (counts only).
 
-Later stages (dbt transforms, modeling, sealed evaluation) are documented as they are implemented.
+## 5. Transform to silver/gold (dbt)
+
+```bash
+uv run prepay transform --data-root <data-root> --lock configs/data.lock.json
+```
+
+This runs every dbt model and data test in `transform/` into
+`<data-root>/warehouse/prepay.duckdb`, using the lock's performance cutoff. It builds typed
+staging with sentinels mapped to NULL, per-loan quarantine and exclusion findings
+(`agg_data_quality`, counts only), first events (MODELING §2 decision table), and the gold
+`fct_hazard_panel` with point-in-time features. Any failed test stops the run. Definitions are in
+ADR 0003.
+
+Later stages (modeling, sealed evaluation) are documented as they are implemented.
