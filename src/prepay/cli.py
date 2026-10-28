@@ -112,6 +112,58 @@ def _cmd_transform(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_train(args: argparse.Namespace) -> int:
+    from prepay.ingest.lock import read_lock
+    from prepay.modeling.train import TrainingConfig, train
+
+    config = TrainingConfig(train_sample_fraction=args.train_sample_fraction)
+    run_dir = train(
+        Path(args.data_root),
+        read_lock(Path(args.lock)),
+        Path(args.out),
+        config,
+        truth_dir=Path(args.truth_dir) if args.truth_dir else None,
+    )
+    manifest = json.loads((run_dir / "run-manifest.json").read_text(encoding="utf-8"))
+    _emit(
+        {
+            "run": run_dir.as_posix(),
+            "selected": manifest["selection"]["selected"],
+            "validation_a_log_loss": manifest["selection"]["validation_a_log_loss"],
+            "calibration_adopted": manifest["selection"]["calibration"]["adopted"],
+            "synthetic": manifest["synthetic"],
+        }
+    )
+    return 0
+
+
+def _cmd_seal(args: argparse.Namespace) -> int:
+    from prepay.modeling.lockbox import seal
+
+    sealed = seal(Path(args.run))
+    _emit({k: sealed.payload[k] for k in ("run_id", "candidate", "candidate_digest")})
+    return 0
+
+
+def _cmd_evaluate_lockbox(args: argparse.Namespace) -> int:
+    from prepay.ingest.lock import read_lock
+    from prepay.modeling.lockbox import evaluate_lockbox
+
+    report = evaluate_lockbox(Path(args.run), Path(args.data_root), read_lock(Path(args.lock)))
+    summary = {
+        window: {
+            "rows": result.get("rows", result.get("selected", {}).get("rows")),
+            "selected_log_loss": result.get("selected", {}).get("log_loss"),
+            "flags": {
+                k: v for k, v in result.get("_flags", {}).items() if k != "paired_difference_vs"
+            },
+        }
+        for window, result in report["results"].items()
+    }
+    _emit({"run_id": report["run_id"], "synthetic": report["synthetic"], "windows": summary})
+    return 0
+
+
 def _cmd_benchmark(args: argparse.Namespace) -> int:
     from prepay.benchmark import run
 
@@ -216,6 +268,39 @@ def build_parser() -> argparse.ArgumentParser:
     transform.add_argument("--lock", required=True)
     transform.add_argument("--dbt-command", default="build", choices=["build", "run", "test"])
     transform.set_defaults(handler=_cmd_transform)
+
+    train_cmd = sub.add_parser(
+        "train",
+        help="fit B0/B1/B2 baselines and the LightGBM candidate; select on validation only",
+        description=(
+            "Reads train/validation windows from the gold panel (test windows are refused), "
+            "tunes on validation A, selects by the pre-registered rule, decides calibration on "
+            "validation B and writes a run directory with JSON/LightGBM-text artifacts."
+        ),
+    )
+    train_cmd.add_argument("--data-root", required=True)
+    train_cmd.add_argument("--lock", required=True)
+    train_cmd.add_argument("--out", default="artifacts/runs")
+    train_cmd.add_argument(
+        "--train-sample-fraction",
+        type=float,
+        help="loan-consistent hash sample of the training window",
+    )
+    train_cmd.add_argument("--truth-dir", help="synthetic truth/ directory for recovery checks")
+    train_cmd.set_defaults(handler=_cmd_train)
+
+    seal_cmd = sub.add_parser("seal", help="freeze a run's candidate before any holdout access")
+    seal_cmd.add_argument("--run", required=True, help="artifacts/runs/<run_id>")
+    seal_cmd.set_defaults(handler=_cmd_seal)
+
+    lockbox = sub.add_parser(
+        "evaluate-lockbox",
+        help="one-shot evaluation of a sealed run on the test windows (refuses a second run)",
+    )
+    lockbox.add_argument("--run", required=True)
+    lockbox.add_argument("--data-root", required=True)
+    lockbox.add_argument("--lock", required=True)
+    lockbox.set_defaults(handler=_cmd_evaluate_lockbox)
 
     bench = sub.add_parser(
         "benchmark",

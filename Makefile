@@ -5,7 +5,7 @@ UV ?= uv
 RUN := $(UV) run --frozen
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check lint fmt typecheck test test-finance synth data-lock benchmark
+.PHONY: help setup check lint fmt typecheck test test-finance synth data-lock benchmark research seal evaluate-lockbox
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -41,3 +41,19 @@ data-lock: ## Verify private source files against configs/data.lock.json (local 
 
 benchmark: ## Measure pipeline wall time, peak RSS and throughput (synthetic dev preset)
 	$(RUN) prepay benchmark --preset dev --work-dir scratch/benchmark --report-dir reports/benchmarks
+
+# ---- private research (real data; never run in public CI). RUN_DIR=artifacts/runs/<run_id>
+DATA_ROOT ?= data
+LOCK ?= configs/data.lock.json
+
+research: ## Local-only: verify lock, ingest, transform, train (real or synthetic data)
+	$(RUN) prepay data-lock verify --raw-dir $(DATA_ROOT)/raw --lock $(LOCK)
+	$(RUN) prepay ingest --raw-dir $(DATA_ROOT)/raw --lock $(LOCK) --data-root $(DATA_ROOT)
+	$(RUN) prepay transform --data-root $(DATA_ROOT) --lock $(LOCK)
+	$(RUN) prepay train --data-root $(DATA_ROOT) --lock $(LOCK) --out artifacts/runs
+
+seal: ## Freeze a run before holdout access: make seal RUN_DIR=artifacts/runs/<run_id>
+	$(RUN) prepay seal --run $(RUN_DIR)
+
+evaluate-lockbox: ## One-shot sealed holdout evaluation: make evaluate-lockbox RUN_DIR=...
+	$(RUN) prepay evaluate-lockbox --run $(RUN_DIR) --data-root $(DATA_ROOT) --lock $(LOCK)

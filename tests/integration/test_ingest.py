@@ -196,8 +196,8 @@ def test_lock_rules_for_real_data(raw: Path, tmp_path: Path) -> None:
     assert lock.performance_cutoff == "2026-03-31"
     write_lock(lock, tmp_path / "data.lock.json")
     assert read_lock(tmp_path / "data.lock.json") == lock
-    (raw / "sflld" / "sample_2014.zip").write_bytes(b"PK")
-    assert "not in lock: sflld/sample_2014.zip" in verify_lock(lock, raw)
+    (raw / "sflld" / "sample_1999.zip").write_bytes(b"PK")
+    assert "not in lock: sflld/sample_1999.zip" in verify_lock(lock, raw)
     (raw / "sflld" / "readme.txt").write_text("x")
     with pytest.raises(LockError, match="unexpected files"):
         create_lock(raw, release=48, terms_reference="ok")
