@@ -6,8 +6,13 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 authors = [{ name = "Sandeep Kumar" }]
 dependencies = [
+    "duckdb>=1.1",
     "numpy>=2.1",
+    "pyarrow>=18",
 ]
+
+[project.scripts]
+prepay = "prepay.cli:main"
 
 [dependency-groups]
 dev = [
@@ -61,6 +66,11 @@ packages = ["prepay"]
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+# pyarrow ships no type information; its values are treated as Any at our thin I/O boundary.
+module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true
 
 # ---------------------------------------------------------------- pytest
 [tool.pytest.ini_options]
