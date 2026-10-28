@@ -121,7 +121,8 @@ def _quality_summary(run_dir: Path) -> dict[str, Any]:
         "truth_recovery": validation.get("_truth_recovery"),
         "holdout": holdout,
         "cohort_backtests": first["cohort_backtests"],
-        "real_data_status": "BLOCKED: no lawfully obtained Freddie Mac files have been evaluated.",
+        "real_data_status": "Real-data evaluation runs privately; no real-data result is "
+        "published in this demo.",
     }
 
 

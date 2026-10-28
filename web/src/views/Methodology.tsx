@@ -34,7 +34,7 @@ export function Methodology() {
             <dt>Served model</dt>
             <dd>{health.model} (run {method.model.run_id}, trained on {method.model.trained_on})</dd>
             <dt>Real-data validation</dt>
-            <dd>Blocked: no lawfully obtained Freddie Mac files have been evaluated</dd>
+            <dd>Runs privately on the owner's machine; no real-data result is published here</dd>
             <dt>Projection latency</dt>
             <dd>
               {health.project_latency_ms

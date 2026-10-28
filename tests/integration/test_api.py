@@ -132,7 +132,7 @@ def test_methodology_and_model_quality_are_labelled(client: TestClient) -> None:
     assert method["model"]["trained_on"].startswith("synthetic")
     quality = client.get("/api/model-quality").json()
     assert quality["synthetic"] is True
-    assert quality["real_data_status"].startswith("BLOCKED")
+    assert "no real-data result is published" in quality["real_data_status"]
     assert set(quality["holdout"]) <= {"test_a", "test_b", "test_c"}
 
 
