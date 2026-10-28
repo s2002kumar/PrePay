@@ -1,0 +1,35 @@
+# Public CI: synthetic, deterministic and offline once dependencies are installed.
+# No secrets are used; no real mortgage data ever enters this workflow.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  python:
+    name: python
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.12.1"
+          enable-cache: true
+      - name: Install locked environment
+        run: make setup
+      - name: Lint, type-check and test (make check)
+        run: make check
+      - name: Finance suite with coverage gate
+        run: make test-finance
