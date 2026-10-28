@@ -81,4 +81,25 @@ staging with sentinels mapped to NULL, per-loan quarantine and exclusion finding
 `fct_hazard_panel` with point-in-time features. Any failed test stops the run. Definitions are in
 ADR 0003.
 
-Later stages (modeling, sealed evaluation) are documented as they are implemented.
+## 6. Train and select (validation only)
+
+```bash
+uv run prepay train --data-root <data-root> --lock configs/data.lock.json --out artifacts/runs
+# optional: --train-sample-fraction 0.25   (whole loans, stable hash; recorded in the manifest)
+```
+
+This fits B0 (PSA), B1 (lookup), B2 (logistic) and M1 (LightGBM) on outcomes through 2017-12,
+tunes on 2018, selects by the pre-registered rule, and decides calibration on 2019 (ADR 0004).
+It writes `artifacts/runs/<run_id>/` with JSON/LightGBM-text artifacts, `validation.json` and a
+manifest of every digest. Test windows are refused at this stage.
+
+## 7. Seal, then evaluate the holdout once
+
+```bash
+uv run prepay seal --run artifacts/runs/<run_id>
+uv run prepay evaluate-lockbox --run artifacts/runs/<run_id> --data-root <data-root>   --lock configs/data.lock.json
+```
+
+The first evaluation is written read-only to `evaluations/first.json` and can't be repeated
+for that run. Report it as is, including any baseline win or degradation flag. Don't publish
+real-data results without the terms review described at the top of this runbook.
