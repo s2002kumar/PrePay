@@ -24,7 +24,7 @@ Last updated: 2026-10-28.
 | P4 | Reproducible trained models | IMPLEMENTED-SYNTHETIC | `src/prepay/modeling/`, ADR 0004, `tests/unit/test_models.py`, `tests/integration/test_modeling.py` | B0/B1/B2/M1 + calibration + run registry with digests on synthetic data only; drift (PSI), seed repeats, ablations and segment reports not built |
 | P5 | Sealed future holdouts | IMPLEMENTED-SYNTHETIC (mechanism) | seal + one-shot lockbox; holdout guard tested with a reader spy; tamper and second-evaluation refusals tested | Real holdout evaluation BLOCKED on data |
 | P6 | Cash-flow conventions + conservation | IMPLEMENTED-SYNTHETIC | `make test-finance`; ADR 0001; `docs/validation/FINANCE_ENGINE.md`; all twelve §6 items tested | Event-timing sensitivity not yet published |
-| P7 | Pooled 12/24m backtests | NOT BUILT | — | Blocked on data for real cohorts |
+| P7 | Pooled 12/24m backtests | IMPLEMENTED-SYNTHETIC | `src/prepay/evaluation/cohort.py` inside the lockbox; `docs/VALIDATION_REPORT.md` §5 | Real cohorts BLOCKED on data; count-weighted estimand; censoring assumed non-informative by the estimator |
 | P8 | Interactive demo | NOT BUILT | — | Hosting not approved |
 | P9 | Licensed-data boundary | NOT BUILT | — | — |
 | P10 | README, reports, reproducible install | NOT BUILT | — | — |
@@ -37,7 +37,7 @@ Last updated: 2026-10-28.
 | M1 Ingest + provenance | IMPLEMENTED-SYNTHETIC | Streaming ZIP to bronze Parquet, data lock, FRED PMMS ingest + local fetch, per-field violation counts; real-data run BLOCKED on data |
 | M2 Feature store | IMPLEMENTED-SYNTHETIC | dbt silver/gold + Python scenario feature state machine with exact historical parity; benchmark baseline in `docs/BENCHMARKS.md`; reviewer packet `docs/reviews/M2.md` |
 | M3 ML | IMPLEMENTED-SYNTHETIC | Models, validation-only selection, cross-fitted calibration, seal/lockbox; trained only on synthetic data; real training BLOCKED on data |
-| M4 Finance engine + freeze | IN PROGRESS | Engine, rate scenarios, fictional pools, model-driven projection with out-of-support flags, seal/lockbox done; censor-aware cohort backtest next |
+| M4 Finance engine + freeze | IMPLEMENTED-SYNTHETIC | Engine, scenarios, pools, projection, seal/lockbox with cohort backtests; reviewer packet `docs/reviews/M4.md`; real freeze/holdout BLOCKED on data |
 | M5 Product + publication | NOT BUILT | |
 
 ## Finance verification detail (FINANCIAL_CONVENTIONS §6)

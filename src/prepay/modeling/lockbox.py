@@ -18,6 +18,8 @@ from typing import Any
 import duckdb
 
 from prepay import periods
+from prepay.evaluation.cohort import backtest as cohort_backtest
+from prepay.features.panel import rate_path_from_bronze
 from prepay.ingest.lock import DataLock
 from prepay.io import read_json, sha256_file, write_json_atomic
 from prepay.modeling import metrics
@@ -92,6 +94,7 @@ def seal(run_dir: Path) -> Seal:
                 "average_precision",
                 "full_payoff_only_CPR_proxy bias/mae",
                 "loan-clustered intervals",
+                "cohort run-off at 6/12/24m vs Aalen-Johansen (hindsight and as-of rates)",
             ],
         },
         "report_flags": REPORT_FLAGS,
@@ -164,6 +167,22 @@ def evaluate_lockbox(run_dir: Path, data_root: Path, lock: DataLock) -> dict[str
                 "paired_difference_vs": differences,
             }
             results[name] = {"window": windows[name].label, **window_result}
+        history = rate_path_from_bronze(data_root / "bronze")
+        cohort_models = {
+            "selected": selected,
+            **{n: run.models[n] for n in ("B1_lookup", "B2_logistic", "M1_lightgbm")},
+        }
+        cohorts = {
+            periods.to_iso(windows[name].first - 1): cohort_backtest(
+                con,
+                cohort_models,
+                history,
+                windows[name].first - 1,
+                seal=sealed,
+                cutoff_month=cutoff,
+            )
+            for name in TEST_WINDOWS
+        }
     finally:
         con.close()
     report = {
@@ -175,6 +194,7 @@ def evaluate_lockbox(run_dir: Path, data_root: Path, lock: DataLock) -> dict[str
         "seal_sha256": sha256_file(run_dir / SEAL),
         "evaluated_at_utc": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "results": results,
+        "cohort_backtests": cohorts,
     }
     write_json_atomic(out, report)
     _read_only(out)

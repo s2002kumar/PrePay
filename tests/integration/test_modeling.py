@@ -123,6 +123,18 @@ def test_seal_and_one_shot_lockbox(
     for result in report["results"].values():
         assert {"B1_lookup", "B2_logistic", "M1_lightgbm", "selected"} <= set(result)
         assert set(result["_flags"]["gbm_vs_baselines"]) == {"B1_lookup", "B2_logistic"}
+    cohorts = report["cohort_backtests"]
+    assert set(cohorts) == {"2019-12", "2021-12", "2023-12"}
+    for cohort in cohorts.values():
+        assert cohort["cohort_loans"] > 50
+        for entry in cohort["horizons"].values():
+            assert 0.0 <= entry["realized_aalen_johansen_prepay"] <= 1.0
+            low, high = (
+                entry["realized_prepay_interval"]["low"],
+                entry["realized_prepay_interval"]["high"],
+            )
+            assert low <= entry["realized_aalen_johansen_prepay"] <= high
+            assert set(entry["models"]["selected"]) == {"hindsight_rates", "as_of_flat_rates"}
     with pytest.raises(LockboxError, match="immutable"):
         evaluate_lockbox(run_dir, root, lock)
 
