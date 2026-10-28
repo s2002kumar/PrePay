@@ -18,8 +18,8 @@ Last updated: 2026-10-28.
 
 | ID | Gate | Status | Evidence | Known gaps |
 |---|---|---|---|---|
-| P1 | Source schema + provenance | IN PROGRESS | `src/prepay/contracts/sflld.py`, ADR 0002, `tests/unit/test_contracts.py` | Layout for R47/R48 transcribed from checksummed official documents and header-verified; ingest not built; pre-R47 fallback BLOCKED (no official layout artifact); real-file verification blocked on data |
-| P2 | Deterministic, idempotent pipelines | NOT BUILT | — | — |
+| P1 | Source schema + provenance | IMPLEMENTED-SYNTHETIC | `src/prepay/contracts/`, `src/prepay/ingest/`, ADR 0002, `tests/integration/test_ingest.py` | Layout header-verified against official files; data lock + checksums + byte-exact bronze lineage; pre-R47 fallback BLOCKED (no official layout artifact); real-file verification BLOCKED on data |
+| P2 | Deterministic, idempotent pipelines | IMPLEMENTED-SYNTHETIC (ingest) | `test_rerun_reuses_outputs_and_detects_tampering`; byte-identical bronze on rerun | dbt/model stages not built yet |
 | P3 | Point-in-time 3-state targets | NOT BUILT | — | — |
 | P4 | Reproducible trained models | NOT BUILT | — | — |
 | P5 | Sealed future holdouts | NOT BUILT | — | Real holdouts blocked on data |
@@ -34,7 +34,7 @@ Last updated: 2026-10-28.
 | Milestone | Status | Notes |
 |---|---|---|
 | M0 Foundations | IN PROGRESS | Tooling, CI, finance core with oracle, source contract, seeded synthetic generator with ground truth and documented anomalies (`docs/SYNTHETIC_DATA.md`); ingest, dbt and the end-to-end synthetic CI path are next |
-| M1 Ingest + provenance | NOT BUILT | |
+| M1 Ingest + provenance | IMPLEMENTED-SYNTHETIC | Streaming ZIP to bronze Parquet, data lock, FRED PMMS ingest + local fetch, per-field violation counts; real-data run BLOCKED on data |
 | M2 Feature store | NOT BUILT | |
 | M3 ML | NOT BUILT | |
 | M4 Finance engine + freeze | NOT BUILT | Engine core exists (see P6); cohort study and sealing not built |

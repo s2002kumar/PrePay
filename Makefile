@@ -5,7 +5,7 @@ UV ?= uv
 RUN := $(UV) run --frozen
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check lint fmt typecheck test test-finance synth
+.PHONY: help setup check lint fmt typecheck test test-finance synth data-lock
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -34,3 +34,6 @@ test-finance: ## Finance suite with >=90% line+branch coverage gate on prepay.fi
 
 synth: ## Generate the fictional CI dataset into data/synthetic/ci
 	$(RUN) prepay synth --preset ci --out data/synthetic/ci
+
+data-lock: ## Verify private source files against configs/data.lock.json (local research only)
+	$(RUN) prepay data-lock verify --raw-dir data/raw --lock configs/data.lock.json

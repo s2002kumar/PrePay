@@ -39,7 +39,10 @@ fingerprint.
    fail loudly. Bronze keeps raw strings, so nothing is lost.
 4. Field count is strict. A row with any other number of fields fails the file. That includes a
    trailing delimiter, which the documents neither promise nor exclude. If real files show one,
-   the contract gets a documented, tested update.
+   the contract gets a documented, tested update. A researcher can pass `--allow-malformed`
+   explicitly. Malformed rows are then skipped and counted, only their line numbers are recorded
+   (never their content), lineage line numbers stay exact, and the policy becomes part of the
+   input fingerprint so strict and lenient outputs are never confused.
 5. Release metadata (number, cutoffs) is declared by the researcher in `configs/data.lock.json`
    and cross-checked against `RELEASES`. Ingest never infers the release from the system date.
 

@@ -45,6 +45,65 @@ def _cmd_synth(args: argparse.Namespace) -> int:
     return 0
 
 
+def _emit(payload: object) -> None:
+    json.dump(payload, sys.stdout, indent=2, sort_keys=True)
+    sys.stdout.write("\n")
+
+
+def _cmd_lock_create(args: argparse.Namespace) -> int:
+    from prepay.ingest.lock import create_lock, write_lock
+
+    lock = create_lock(
+        Path(args.raw_dir),
+        release=args.release,
+        terms_reference=args.terms_reference or "",
+        synthetic_manifest=Path(args.synthetic_manifest) if args.synthetic_manifest else None,
+    )
+    write_lock(lock, Path(args.out))
+    _emit(
+        {
+            "lock": args.out,
+            "files": len(lock.sflld) + len(lock.pmms),
+            "fingerprint": lock.fingerprint(),
+            "synthetic": lock.synthetic,
+        }
+    )
+    return 0
+
+
+def _cmd_lock_verify(args: argparse.Namespace) -> int:
+    from prepay.ingest.lock import read_lock, verify_lock
+
+    problems = verify_lock(read_lock(Path(args.lock)), Path(args.raw_dir))
+    _emit({"lock": args.lock, "ok": not problems, "problems": problems})
+    return 0 if not problems else 2
+
+
+def _cmd_ingest(args: argparse.Namespace) -> int:
+    from prepay.ingest import ingest_all
+    from prepay.ingest.lock import read_lock
+
+    summary = ingest_all(
+        Path(args.raw_dir),
+        read_lock(Path(args.lock)),
+        Path(args.data_root) / "bronze",
+        allow_malformed=args.allow_malformed,
+    )
+    _emit(
+        {k: summary[k] for k in ("synthetic", "release", "performance_cutoff")}
+        | {"vintages": len(summary["vintages"])}
+    )
+    return 0
+
+
+def _cmd_rates_fetch(args: argparse.Namespace) -> int:
+    from prepay.ingest.lock import PMMS_SERIES
+    from prepay.ingest.pmms import fetch_series
+
+    _emit([fetch_series(series, Path(args.out)) for series in PMMS_SERIES])
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="prepay",
@@ -82,6 +141,53 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-anomalies", dest="anomalies", action="store_false", help="generate clean files only"
     )
     synth.set_defaults(handler=_cmd_synth)
+
+    lock = sub.add_parser("data-lock", help="create or verify the source-file lock (no rows)")
+    lock_sub = lock.add_subparsers(dest="lock_command", required=True)
+    create = lock_sub.add_parser(
+        "create",
+        help="hash every source file and declare its release",
+        description=(
+            "Record name, size and SHA-256 of each sflld/sample_YYYY.zip and pmms/*.csv under "
+            "--raw-dir. Real data requires --release and --terms-reference; synthetic data takes "
+            "both from --synthetic-manifest."
+        ),
+    )
+    create.add_argument("--raw-dir", required=True)
+    create.add_argument("--out", required=True, help="lock path, e.g. configs/data.lock.json")
+    create.add_argument("--release", type=int, default=48)
+    create.add_argument("--terms-reference", help="how/when the Freddie Mac terms were accepted")
+    create.add_argument("--synthetic-manifest", help="manifest.json of a prepay synth dataset")
+    create.set_defaults(handler=_cmd_lock_create)
+    verify = lock_sub.add_parser("verify", help="fail (exit 2) if any file differs from the lock")
+    verify.add_argument("--raw-dir", required=True)
+    verify.add_argument("--lock", required=True)
+    verify.set_defaults(handler=_cmd_lock_verify)
+
+    ingest = sub.add_parser(
+        "ingest",
+        help="verify the lock, then stream sources to bronze Parquet",
+        description=(
+            "Idempotent: unchanged inputs are reused, changed inputs are rebuilt atomically. "
+            "Malformed rows stop the run unless --allow-malformed quarantines and counts them."
+        ),
+    )
+    ingest.add_argument("--raw-dir", required=True)
+    ingest.add_argument("--lock", required=True)
+    ingest.add_argument(
+        "--data-root", required=True, help="bronze is written to <data-root>/bronze"
+    )
+    ingest.add_argument("--allow-malformed", action="store_true")
+    ingest.set_defaults(handler=_cmd_ingest)
+
+    rates = sub.add_parser("rates", help="public mortgage-rate series")
+    rates_sub = rates.add_subparsers(dest="rates_command", required=True)
+    fetch = rates_sub.add_parser(
+        "fetch",
+        help="download FRED MORTGAGE30US/MORTGAGE15US (network; local research only)",
+    )
+    fetch.add_argument("--out", required=True, help="directory, e.g. data/raw/pmms")
+    fetch.set_defaults(handler=_cmd_rates_fetch)
     return parser
 
 

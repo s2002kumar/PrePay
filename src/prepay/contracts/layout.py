@@ -25,6 +25,10 @@ class Kind(StrEnum):
     TEXT = "text"
 
 
+#: Plain decimal notation only: no exponent, whitespace, sign prefix "+", or thousands separators.
+NUMERIC_PATTERNS = {Kind.INTEGER: r"-?\d+", Kind.DECIMAL: r"-?\d+(\.\d+)?"}
+
+
 @dataclass(frozen=True, slots=True)
 class SourceDocument:
     """An official document a layout was transcribed from, pinned by content hash."""
@@ -70,13 +74,12 @@ class Field:
             return f"length {len(raw)} exceeds documented maximum {self.max_length}"
         if self.kind is Kind.CODE and raw not in self.codes:
             return "value is not in the documented enumeration"
-        if self.pattern is not None and re.fullmatch(self.pattern, raw) is None:
+        if self.pattern is not None and re.fullmatch(self.pattern, raw, re.ASCII) is None:
             return "value does not match the documented format"
         if self.kind in (Kind.INTEGER, Kind.DECIMAL):
-            try:
-                number = float(raw)
-            except ValueError:
+            if re.fullmatch(NUMERIC_PATTERNS[self.kind], raw, re.ASCII) is None:
                 return "value is not numeric"
+            number = float(raw)
             if self.value_range is not None:
                 low, high = self.value_range
                 if not low <= number <= high:
