@@ -234,6 +234,7 @@ def train(
         "primary_metric": PRIMARY_METRIC,
         "selection": selection,
         "gbm_feature_importance_gain": best_gbm[1].feature_importance(),
+        "feature_support": feature_support(train_batch),
         "seconds": round(time.perf_counter() - started, 1),
     }
     write_json_atomic(run_dir / MANIFEST, manifest)
@@ -242,6 +243,28 @@ def train(
         extra={"run_id": run_id, "selected": selection["selected"], "synthetic": lock.synthetic},
     )
     return run_dir
+
+
+SUPPORT_FEATURES = (
+    "incentive_bps",
+    "market_rate_t1",
+    "rate_change_6m_bps",
+    "loan_age",
+    "burnout_months",
+)
+
+
+def feature_support(batch: PanelBatch) -> dict[str, dict[str, float]]:
+    """0.5%-99.5% training range of rate-driven features, for scenario out-of-support flags."""
+    support = {}
+    for name in SUPPORT_FEATURES:
+        values = np.asarray(batch.features[name], dtype=np.float64)
+        values = values[np.isfinite(values)]
+        support[name] = {
+            "low": float(np.quantile(values, 0.005)),
+            "high": float(np.quantile(values, 0.995)),
+        }
+    return support
 
 
 def _window_json(w: Window) -> dict[str, Any]:

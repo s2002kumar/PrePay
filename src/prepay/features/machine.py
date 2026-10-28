@@ -134,6 +134,19 @@ class RatePath:
         cutover = PMMS_METHOD_CHANGE.toordinal()
         return cls(first, r30, r15, observed_30 >= cutover)
 
+    def truncated(self, through_month: int) -> RatePath:
+        """History known at the end of ``through_month`` (as-of view for scenarios/backtests)."""
+        if not self.first_month <= through_month <= self.last_month:
+            raise ValueError("through_month outside the rate path")
+        keep = through_month - self.first_month + 1
+        return replace(
+            self,
+            rate_30y=self.rate_30y[:keep],
+            rate_15y=self.rate_15y[:keep],
+            application_based=self.application_based[:keep],
+            hypothetical_from=None,
+        )
+
     def extended(self, rate_30y: FloatArray, rate_15y: FloatArray) -> RatePath:
         """Append hypothetical month-end rates for the months after :attr:`last_month`."""
         if rate_30y.shape != rate_15y.shape:
