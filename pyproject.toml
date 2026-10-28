@@ -7,8 +7,10 @@ requires-python = ">=3.12,<3.13"
 authors = [{ name = "Sandeep Kumar" }]
 dependencies = [
     "duckdb>=1.1",
+    "lightgbm>=4.5",
     "numpy>=2.1",
     "pyarrow>=18",
+    "scikit-learn>=1.5",
 ]
 
 [project.scripts]
@@ -78,8 +80,8 @@ module = ["prepay.transform"]
 disallow_untyped_calls = false
 
 [[tool.mypy.overrides]]
-# pyarrow ships no type information; its values are treated as Any at our thin I/O boundary.
-module = ["pyarrow", "pyarrow.*"]
+# pyarrow, scikit-learn and SciPy ship no type information; treated as Any at call sites.
+module = ["pyarrow", "pyarrow.*", "sklearn", "sklearn.*", "scipy", "scipy.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- pytest

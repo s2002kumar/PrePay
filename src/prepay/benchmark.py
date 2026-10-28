@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import datetime as dt
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -21,6 +20,7 @@ from typing import Any
 import duckdb
 
 from prepay.io import read_json, write_json_atomic
+from prepay.provenance import git_sha
 from prepay.resources import host_description
 
 PACKAGES = ("numpy", "pyarrow", "duckdb", "dbt-core", "dbt-duckdb")
@@ -53,19 +53,6 @@ def _run_stage(name: str, args: list[str], work_dir: Path) -> dict[str, Any]:
 
 def _dir_bytes(path: Path) -> int:
     return sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
-
-
-def _git_sha() -> str | None:
-    git = shutil.which("git")
-    if git is None:
-        return None
-    try:
-        out = subprocess.run(  # noqa: S603
-            [git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return None
-    return out.stdout.strip()
 
 
 def run(preset: str, work_dir: Path, *, report_dir: Path) -> dict[str, Any]:
@@ -138,7 +125,7 @@ def run(preset: str, work_dir: Path, *, report_dir: Path) -> dict[str, Any]:
         "kind": "prepay-pipeline-benchmark",
         "synthetic": True,
         "measured_at_utc": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
-        "git_sha": _git_sha(),
+        "git_sha": git_sha(),
         "preset": preset,
         "dataset": {
             "loans": int(totals["loans"]),
