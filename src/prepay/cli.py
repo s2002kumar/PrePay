@@ -164,6 +164,16 @@ def _cmd_evaluate_lockbox(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_finance_report(args: argparse.Namespace) -> int:
+    from prepay.finance.validation import render_report
+
+    target = Path(args.out)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(render_report(), encoding="utf-8", newline="\n")
+    _emit({"written": target.as_posix()})
+    return 0
+
+
 def _cmd_benchmark(args: argparse.Namespace) -> int:
     from prepay.benchmark import run
 
@@ -301,6 +311,12 @@ def build_parser() -> argparse.ArgumentParser:
     lockbox.add_argument("--data-root", required=True)
     lockbox.add_argument("--lock", required=True)
     lockbox.set_defaults(handler=_cmd_evaluate_lockbox)
+
+    report = sub.add_parser(
+        "finance-report", help="regenerate the finance engine validation disclosures (markdown)"
+    )
+    report.add_argument("--out", default="docs/validation/FINANCE_ENGINE.md")
+    report.set_defaults(handler=_cmd_finance_report)
 
     bench = sub.add_parser(
         "benchmark",

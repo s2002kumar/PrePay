@@ -23,7 +23,7 @@ Last updated: 2026-10-28.
 | P3 | Point-in-time 3-state targets | IMPLEMENTED-SYNTHETIC | `transform/`, ADR 0003, `tests/integration/test_transform.py` (SQL = independent Python oracle; features reproduce generator truth < 1e-9; leakage/chronology guards proven to fail on corrupted data) | Real-data counts for date-mismatch and unexplained-end rules pending data |
 | P4 | Reproducible trained models | IMPLEMENTED-SYNTHETIC | `src/prepay/modeling/`, ADR 0004, `tests/unit/test_models.py`, `tests/integration/test_modeling.py` | B0/B1/B2/M1 + calibration + run registry with digests on synthetic data only; drift (PSI), seed repeats, ablations and segment reports not built |
 | P5 | Sealed future holdouts | IMPLEMENTED-SYNTHETIC (mechanism) | seal + one-shot lockbox; holdout guard tested with a reader spy; tamper and second-evaluation refusals tested | Real holdout evaluation BLOCKED on data |
-| P6 | Cash-flow conventions + conservation | IMPLEMENTED-SYNTHETIC (partial) | `make test-finance`; ADR 0001 | §6.7 rate-shock invariance awaits the scenario layer; §6.9 rep-line error table not yet published |
+| P6 | Cash-flow conventions + conservation | IMPLEMENTED-SYNTHETIC | `make test-finance`; ADR 0001; `docs/validation/FINANCE_ENGINE.md`; all twelve §6 items tested | Event-timing sensitivity not yet published |
 | P7 | Pooled 12/24m backtests | NOT BUILT | — | Blocked on data for real cohorts |
 | P8 | Interactive demo | NOT BUILT | — | Hosting not approved |
 | P9 | Licensed-data boundary | NOT BUILT | — | — |
@@ -37,7 +37,7 @@ Last updated: 2026-10-28.
 | M1 Ingest + provenance | IMPLEMENTED-SYNTHETIC | Streaming ZIP to bronze Parquet, data lock, FRED PMMS ingest + local fetch, per-field violation counts; real-data run BLOCKED on data |
 | M2 Feature store | IMPLEMENTED-SYNTHETIC | dbt silver/gold + Python scenario feature state machine with exact historical parity; benchmark baseline in `docs/BENCHMARKS.md`; reviewer packet `docs/reviews/M2.md` |
 | M3 ML | IMPLEMENTED-SYNTHETIC | Models, validation-only selection, cross-fitted calibration, seal/lockbox; trained only on synthetic data; real training BLOCKED on data |
-| M4 Finance engine + freeze | NOT BUILT | Engine core exists (see P6); cohort study and sealing not built |
+| M4 Finance engine + freeze | IN PROGRESS | Engine, rate scenarios, fictional pools, model-driven projection with out-of-support flags, seal/lockbox done; censor-aware cohort backtest next |
 | M5 Product + publication | NOT BUILT | |
 
 ## Finance verification detail (FINANCIAL_CONVENTIONS §6)
@@ -50,9 +50,9 @@ Last updated: 2026-10-28.
 | 4 Certain payoff / certain credit exit | `test_6_4_*` | pass |
 | 5 Arbitrary simplex conservation | `test_6_5_*` (Hypothesis) | pass |
 | 6 Recovery lag beyond horizon | `test_6_6_*` | pass |
-| 7 Market shock leaves contractual flows unchanged | — | NOT BUILT (scenario layer) |
+| 7 Market shock leaves contractual flows unchanged | `test_6_7_rate_shock_with_fixed_hazards_leaves_contractual_flows_identical` | pass |
 | 8 Lower payoff hazard lowers same-month payoff | `test_6_8_*` (Hypothesis) | pass |
-| 9 Rep-line vs loan-level, ≥5 profiles | `test_6_9_*` (6 profiles) | pass; error table pending publication |
+| 9 Rep-line vs loan-level, ≥5 profiles | `test_6_9_*` (6 profiles) | pass; errors published in `docs/validation/FINANCE_ENGINE.md` |
 | 10 Monte Carlo converges to expected ledger | `test_6_10_*` | pass |
 | 11 PSA round trip | `test_6_11_*` | pass |
 | 12 No rounding, no clipping | `test_6_12_*` | pass |
