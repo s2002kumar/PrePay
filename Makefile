@@ -5,7 +5,7 @@ UV ?= uv
 RUN := $(UV) run --frozen
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check lint fmt typecheck test test-finance
+.PHONY: help setup check lint fmt typecheck test test-finance synth
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -31,3 +31,6 @@ test: ## All tests, including slow mutation checks
 
 test-finance: ## Finance suite with >=90% line+branch coverage gate on prepay.finance
 	$(RUN) pytest tests/financial --cov=prepay.finance --cov-branch --cov-report=term-missing --cov-fail-under=90
+
+synth: ## Generate the fictional CI dataset into data/synthetic/ci
+	$(RUN) prepay synth --preset ci --out data/synthetic/ci
