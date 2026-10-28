@@ -5,7 +5,7 @@ UV ?= uv
 RUN := $(UV) run --frozen
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check lint fmt typecheck test test-finance synth data-lock benchmark research seal evaluate-lockbox
+.PHONY: help setup check lint fmt typecheck test test-finance synth data-lock benchmark research seal evaluate-lockbox synthetic-study
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -57,3 +57,14 @@ seal: ## Freeze a run before holdout access: make seal RUN_DIR=artifacts/runs/<r
 
 evaluate-lockbox: ## One-shot sealed holdout evaluation: make evaluate-lockbox RUN_DIR=...
 	$(RUN) prepay evaluate-lockbox --run $(RUN_DIR) --data-root $(DATA_ROOT) --lock $(LOCK)
+
+# ---- end-to-end synthetic study (public-safe): generate -> lock -> ingest -> dbt -> train -> seal -> lockbox
+STUDY := data/synthetic/study
+synthetic-study: ## Full research pipeline on fictional data, including the one-shot lockbox
+	$(RUN) prepay synth --preset ci --out $(STUDY)/source
+	$(RUN) prepay data-lock create --raw-dir $(STUDY)/source/raw --synthetic-manifest $(STUDY)/source/manifest.json --out $(STUDY)/data.lock.json
+	$(RUN) prepay ingest --raw-dir $(STUDY)/source/raw --lock $(STUDY)/data.lock.json --data-root $(STUDY)
+	$(RUN) prepay transform --data-root $(STUDY) --lock $(STUDY)/data.lock.json
+	$(RUN) prepay train --data-root $(STUDY) --lock $(STUDY)/data.lock.json --out $(STUDY)/runs --truth-dir $(STUDY)/source/truth
+	$(RUN) prepay seal --run "$$(ls -d $(STUDY)/runs/*/ | tail -1)"
+	$(RUN) prepay evaluate-lockbox --run "$$(ls -d $(STUDY)/runs/*/ | tail -1)" --data-root $(STUDY) --lock $(STUDY)/data.lock.json
