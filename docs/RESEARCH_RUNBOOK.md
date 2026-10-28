@@ -65,8 +65,14 @@ uv run prepay ingest --raw-dir <raw-dir> --lock configs/data.lock.json --data-ro
 - Any row with the wrong number of fields **stops** the run and reports line numbers only. If you
   have checked the cause, rerun with `--allow-malformed` to skip and count such rows.
 - Reruns reuse unchanged vintages; changed inputs rebuild atomically.
-- `<data-root>/bronze/_ingest_summary.json` reports row counts, malformed rows and per-field
-  domain violations (counts only).
+- `<data-root>/bronze/_ingest_summary.json` reports row counts, malformed rows, per-field
+  domain violations and each member's period range (counts only).
+- **Release check.** A performance record dated after the locked release's cutoff stops the run:
+  the file can't belong to that release. A dataset whose latest reporting period is earlier than
+  the cutoff is also refused, because that is what an older release locked under the wrong
+  number looks like. Pass `--allow-early-end` only for a deliberate download of old vintages.
+- Measured on the full Release 48 Standard sample (8.85 GB uncompressed), on a 15.4 GB Windows
+  laptop: about 27 minutes and 417 MiB peak RSS, while other heavy work was running.
 
 ## 5. Transform to silver/gold (dbt)
 
@@ -75,11 +81,31 @@ uv run prepay transform --data-root <data-root> --lock configs/data.lock.json
 ```
 
 This runs every dbt model and data test in `transform/` into
-`<data-root>/warehouse/prepay.duckdb`, using the lock's performance cutoff. It builds typed
+`<data-root>/warehouse/prepay.duckdb`, using the lock's performance cutoff. On a 16 GB machine,
+pass `--memory-limit 8GB`. DuckDB then spills large joins and windows to
+`prepay.duckdb.tmp` (allow tens of GB of free disk) instead of exhausting memory. It builds typed
 staging with sentinels mapped to NULL, per-loan quarantine and exclusion findings
 (`agg_data_quality`, counts only), first events (MODELING §2 decision table), and the gold
 `fct_hazard_panel` with point-in-time features. Any failed test stops the run. Definitions are in
 ADR 0003.
+
+## 5b. Profile and audit (aggregates only)
+
+```bash
+uv run prepay profile --data-root <data-root> --lock configs/data.lock.json   --out reports/real/profile.json --outcomes-through 2019-12
+uv run prepay audit --data-root <data-root> --lock configs/data.lock.json   --out reports/real/audit.json            # exit 2 on any disagreement
+uv run prepay fingerprint --data-root <data-root> --out reports/real/warehouse-fingerprint.json
+```
+
+- `profile` reports volumes, quality findings, missingness, chronology and UPB disclosure.
+  Event and loss distributions stop at `--outcomes-through`, so outcomes in the sealed windows
+  stay unseen until the lockbox opens (ADR 0006 §6).
+- `audit` compares dbt quarantine, exclusions, first events and panel outcomes against a
+  plain-Python oracle that reads bronze directly, on five disjoint 1% loan-hash slices. It also
+  compares gold features with the scenario state machine. It writes counts, never loan
+  identifiers.
+- `fingerprint` writes each table's row count and an order-independent content hash, so two
+  builds can be compared.
 
 ## 6. Train and select (validation only)
 
@@ -91,7 +117,13 @@ uv run prepay train --data-root <data-root> --lock configs/data.lock.json --out 
 This fits B0 (PSA), B1 (lookup), B2 (logistic) and M1 (LightGBM) on outcomes through 2017-12,
 tunes on 2018, selects by the pre-registered rule, and decides calibration on 2019 (ADR 0004).
 It writes `artifacts/runs/<run_id>/` with JSON/LightGBM-text artifacts, `validation.json` and a
-manifest of every digest. Test windows are refused at this stage.
+manifest of every digest. The manifest also records the credit-sufficiency decision of ADR 0006
+§8. Test windows are refused at this stage. At full sample scale on a 16 GB machine, use
+`--train-sample-fraction 0.1`, the largest pre-registered fraction that fits (ADR 0006 §5).
+
+Before sealing, `uv run prepay diagnose-incentive --run <run> --data-root <data-root> --lock
+configs/data.lock.json --out reports/real/diagnose-incentive.json` shows B1's training support per
+incentive bin and every model's incentive response on Validation B rows (ADR 0007).
 
 ## 7. Seal, then evaluate the holdout once
 
@@ -101,5 +133,6 @@ uv run prepay evaluate-lockbox --run artifacts/runs/<run_id> --data-root <data-r
 ```
 
 The first evaluation is written read-only to `evaluations/first.json` and can't be repeated
-for that run. Report it as is, including any baseline win or degradation flag. Don't publish
+for that run. Besides the ADR 0004 metrics, it holds the ADR 0006 secondary analyses: segment
+tables, credit gating, balance run-off and informative-censoring bounds. Report it as is, including any baseline win or degradation flag. Don't publish
 real-data results without the terms review described at the top of this runbook.

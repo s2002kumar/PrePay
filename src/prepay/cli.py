@@ -89,6 +89,7 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
         read_lock(Path(args.lock)),
         Path(args.data_root) / "bronze",
         allow_malformed=args.allow_malformed,
+        allow_early_end=args.allow_early_end,
     )
     _emit(
         {k: summary[k] for k in ("synthetic", "release", "performance_cutoff")}
@@ -102,7 +103,12 @@ def _cmd_transform(args: argparse.Namespace) -> int:
     from prepay.transform import run_dbt, warehouse_path
 
     started = time.perf_counter()
-    run_dbt(Path(args.data_root), read_lock(Path(args.lock)), command=args.dbt_command)
+    run_dbt(
+        Path(args.data_root),
+        read_lock(Path(args.lock)),
+        command=args.dbt_command,
+        memory_limit=args.memory_limit,
+    )
     _emit(
         {
             "warehouse": warehouse_path(Path(args.data_root)).as_posix(),
@@ -134,6 +140,63 @@ def _cmd_train(args: argparse.Namespace) -> int:
             "synthetic": manifest["synthetic"],
         }
     )
+    return 0
+
+
+def _cmd_profile(args: argparse.Namespace) -> int:
+    from prepay.audit.profile import profile
+    from prepay.ingest.lock import read_lock
+    from prepay.io import write_json_atomic
+
+    report = profile(
+        Path(args.data_root), read_lock(Path(args.lock)), outcomes_through=args.outcomes_through
+    )
+    write_json_atomic(Path(args.out), report)
+    _emit({"out": args.out, "outcomes_through": args.outcomes_through})
+    return 0
+
+
+def _cmd_audit(args: argparse.Namespace) -> int:
+    from prepay.audit.agreement import run_audit
+    from prepay.ingest.lock import read_lock
+    from prepay.io import write_json_atomic
+
+    report = run_audit(Path(args.data_root), read_lock(Path(args.lock)), slices=args.slices)
+    write_json_atomic(Path(args.out), report)
+    _emit(
+        {
+            "out": args.out,
+            "loan_share_audited": report["loan_share_audited"],
+            "labels_all_agree": report["labels_all_agree"],
+            "features_all_match": report["features"]["all_match"],
+        }
+    )
+    return 0 if report["labels_all_agree"] and report["features"]["all_match"] else 2
+
+
+def _cmd_diagnose_incentive(args: argparse.Namespace) -> int:
+    from prepay.ingest.lock import read_lock
+    from prepay.io import write_json_atomic
+    from prepay.modeling.diagnostics import investigate
+
+    report = investigate(
+        Path(args.run),
+        Path(args.data_root),
+        read_lock(Path(args.lock)),
+        truth_dir=Path(args.truth_dir) if args.truth_dir else None,
+    )
+    write_json_atomic(Path(args.out), report)
+    _emit({"out": args.out, "run_id": report["run_id"]})
+    return 0
+
+
+def _cmd_fingerprint(args: argparse.Namespace) -> int:
+    from prepay.audit.fingerprint import warehouse_fingerprint
+    from prepay.io import write_json_atomic
+
+    report = warehouse_fingerprint(Path(args.data_root))
+    write_json_atomic(Path(args.out), report)
+    _emit({"out": args.out, "tables": len(report)})
     return 0
 
 
@@ -309,6 +372,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--data-root", required=True, help="bronze is written to <data-root>/bronze"
     )
     ingest.add_argument("--allow-malformed", action="store_true")
+    ingest.add_argument(
+        "--allow-early-end",
+        action="store_true",
+        help="accept data ending before the release cutoff (a download of old vintages only)",
+    )
     ingest.set_defaults(handler=_cmd_ingest)
 
     transform = sub.add_parser(
@@ -322,6 +390,11 @@ def build_parser() -> argparse.ArgumentParser:
     transform.add_argument("--data-root", required=True)
     transform.add_argument("--lock", required=True)
     transform.add_argument("--dbt-command", default="build", choices=["build", "run", "test"])
+    transform.add_argument(
+        "--memory-limit",
+        default="80%",
+        help="DuckDB memory_limit (e.g. 6GB or 60%%); work beyond it spills to disk",
+    )
     transform.set_defaults(handler=_cmd_transform)
 
     train_cmd = sub.add_parser(
@@ -343,6 +416,54 @@ def build_parser() -> argparse.ArgumentParser:
     )
     train_cmd.add_argument("--truth-dir", help="synthetic truth/ directory for recovery checks")
     train_cmd.set_defaults(handler=_cmd_train)
+
+    profile_cmd = sub.add_parser(
+        "profile",
+        help="aggregate data profile of a built warehouse (counts and shares only)",
+        description=(
+            "Volumes, quality findings, missingness, chronology, UPB disclosure and, through "
+            "--outcomes-through only, event and loss distributions (ADR 0006 §6)."
+        ),
+    )
+    profile_cmd.add_argument("--data-root", required=True)
+    profile_cmd.add_argument("--lock", required=True)
+    profile_cmd.add_argument("--out", required=True, help="JSON report path")
+    profile_cmd.add_argument("--outcomes-through", default="2019-12", help="YYYY-MM")
+    profile_cmd.set_defaults(handler=_cmd_profile)
+
+    audit = sub.add_parser(
+        "audit",
+        help="label and feature agreement between independent implementations",
+        description=(
+            "Compares dbt quarantine, exclusion, first events and panel outcomes with a "
+            "plain-Python oracle reading bronze, on disjoint 1%% loan-hash slices, and gold "
+            "features with the Python state machine. Emits agreement counts only. Exit code 2 "
+            "on any disagreement."
+        ),
+    )
+    audit.add_argument("--data-root", required=True)
+    audit.add_argument("--lock", required=True)
+    audit.add_argument("--out", required=True, help="JSON report path")
+    audit.add_argument("--slices", type=int, default=5, help="disjoint 1%% loan slices")
+    audit.set_defaults(handler=_cmd_audit)
+
+    diagnose = sub.add_parser(
+        "diagnose-incentive",
+        help="B1 bin support and incentive partial dependence (training/validation rows only)",
+    )
+    diagnose.add_argument("--run", required=True)
+    diagnose.add_argument("--data-root", required=True)
+    diagnose.add_argument("--lock", required=True)
+    diagnose.add_argument("--out", required=True)
+    diagnose.add_argument("--truth-dir", help="synthetic truth/ directory (adds the true curve)")
+    diagnose.set_defaults(handler=_cmd_diagnose_incentive)
+
+    fingerprint = sub.add_parser(
+        "fingerprint", help="row count and order-independent content hash of every warehouse table"
+    )
+    fingerprint.add_argument("--data-root", required=True)
+    fingerprint.add_argument("--out", required=True)
+    fingerprint.set_defaults(handler=_cmd_fingerprint)
 
     seal_cmd = sub.add_parser("seal", help="freeze a run's candidate before any holdout access")
     seal_cmd.add_argument("--run", required=True, help="artifacts/runs/<run_id>")

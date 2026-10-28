@@ -35,7 +35,7 @@ owner completes a terms review, this file records only process status, never rea
 | P7 | Pooled 12/24m backtests | IMPLEMENTED-SYNTHETIC | `src/prepay/evaluation/cohort.py` inside the lockbox; `docs/VALIDATION_REPORT.md` §5 | Real cohorts BLOCKED on data; count-weighted estimand; censoring assumed non-informative by the estimator |
 | P8 | Interactive demo | IMPLEMENTED-SYNTHETIC (local + Docker) | `src/prepay/api/`, `web/`, ADR 0005; CI `e2e` job (Playwright + axe, 17 tests), `tests/integration/test_api.py` | Hosted deploy BLOCKED on hosting approval |
 | P9 | Licensed-data boundary | IMPLEMENTED-SYNTHETIC | `prepay publication-check` (tracked set in `make check`; history + build outputs in CI `e2e`); synthetic-only bundle loader; allowlist `.dockerignore` | Manual license review needed before any real-data publication |
-| P10 | README, reports, reproducible install | IMPLEMENTED-SYNTHETIC | README, VALIDATION_REPORT (real section BLOCKED), BENCHMARKS, review packets M2/M4/M5, Dockerfile | Clean-clone reproduction recorded in `docs/reviews/M5.md`; real results BLOCKED |
+| P10 | README, reports, reproducible install | IMPLEMENTED-SYNTHETIC | README, VALIDATION_REPORT, BENCHMARKS, review packets M2/M4/M5, Dockerfile; clean clone of `main` `f8ac9e2` in WSL2 Ubuntu: `make check` 275 passed, `make test-finance` 85 passed (95.60% finance coverage), 2026-10-28 | Real-data results private pending terms review |
 
 ## Milestones
 
