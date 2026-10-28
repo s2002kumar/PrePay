@@ -19,7 +19,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from prepay.finance.amortization import FloatArray, IntArray, contractual_month
+from prepay.arrays import FloatArray, IntArray
+from prepay.finance.amortization import contractual_month
 from prepay.finance.errors import ConservationError, FinanceInputError, InvalidHazardError
 
 #: Absolute tolerance on ``p + d + s = 1`` for each line-month.

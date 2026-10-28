@@ -12,7 +12,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from prepay.finance.amortization import FloatArray, contractual_month
+from prepay.arrays import FloatArray
+from prepay.finance.amortization import contractual_month
 from prepay.finance.errors import FinanceInputError
 from prepay.finance.ledger import CreditAssumptions, HazardPaths, LoanLines
 

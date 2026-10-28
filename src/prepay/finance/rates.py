@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 import numpy.typing as npt
 
-from prepay.finance.amortization import FloatArray
+from prepay.arrays import FloatArray
 
 #: 100% PSA ramps CPR by 0.2%/month of age to a 6% plateau at month 30.
 PSA_RAMP_PER_MONTH = 0.002
