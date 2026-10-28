@@ -18,7 +18,8 @@ spine.
    performance rows, no performance rows, duplicate origination IDs, any field-domain violation,
    missing required origination fields, conflicting duplicate periods, gaps, rows after
    termination, same-month modification + termination, a terminal code without an effective date,
-   or multiple terminal rows. A valid loan outside the modeled population is *excluded*:
+   multiple terminal rows, or a `P` (prior modification) flag after entry with no earlier `Y`
+   (amendment 1). A valid loan outside the modeled population is *excluded*:
    modification flag `P` on its first observed row, or a non-FRM / interest-only product.
 2. **Exact duplicates are collapsed, not quarantined.** Identical rows for one loan-month carry
    no contradiction. The first source line is kept, and a dbt test reconciles bronze rows =
@@ -58,6 +59,23 @@ spine.
 - Recomputing the generator's true hazard from the gold features reproduces it to within 1e-9.
   That only works if incentive, burnout, age, calendar month and borrower attributes are all
   aligned to `t-1` exactly as the generator used them.
+
+## Amendment 1 (2026-10-28, before any real-data model was trained)
+
+The private full-sample label audit (ADR 0006 §6) found the SQL and the independent Python
+oracle disagreeing. DuckDB's `arg_min(flag, month)` skips rows whose flag is blank, so the SQL
+"first row is `P`" test was really "first *non-blank* flag is `P`". That wrongly excluded loans
+that show `P` only after entry. Such a loan reports a prior modification with no `Y` month, so its
+modification month, and therefore its censoring time, is unknown. Real-data counts stay in the
+private review packet (ADR 0006 §3).
+
+- The SQL now uses `arg_min_null`.
+- Such loans are quarantined as `prior_modification_without_y`, in SQL and in the oracle, rather
+  than guessed into the panel. This follows the existing rule: data problems are quarantined and
+  counted, never repaired.
+- The synthetic generator never produces this pattern. A targeted test edits two loans in a copy
+  of the synthetic source so both rules are exercised. The generator is left unchanged so
+  published synthetic evidence stays exactly reproducible.
 
 ## Consequences
 

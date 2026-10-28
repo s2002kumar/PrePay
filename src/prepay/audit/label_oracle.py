@@ -118,6 +118,20 @@ def run(bronze: Path, cutoff_month: int, buckets: tuple[int, int] | None = None)
             reasons.append("after_termination")
         if len(terminal) > 1:
             reasons.append("multiple_terminal")
+        flagged = sorted(
+            (m, r[col["modification_flag"]])
+            for r in p
+            if (m := _month(r[col["period"]])) is not None
+        )
+        first_p = next((m for m, flag in flagged if flag == "P"), None)
+        first_y = next((m for m, flag in flagged if flag == "Y"), None)
+        if (
+            flagged
+            and first_p is not None
+            and first_p > flagged[0][0]
+            and (first_y is None or first_p < first_y)
+        ):
+            reasons.append("prior_modification_without_y")
         for r in p:
             if r[col["zero_balance_code"]] != "" and r[col["modification_flag"]] == "Y":
                 reasons.append("mod_with_terminal")

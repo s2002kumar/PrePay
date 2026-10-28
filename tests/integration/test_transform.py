@@ -204,3 +204,94 @@ def test_guards_fail_on_corrupted_gold(
 def test_transform_requires_ingested_bronze(tmp_path: Path, built: tuple[Path, DataLock]) -> None:
     with pytest.raises(TransformError, match="prepay ingest"):
         run_dbt(tmp_path, built[1])
+
+
+def _rewrite_perf(archive: Path, member: str, edit) -> None:
+    import zipfile
+
+    with zipfile.ZipFile(archive) as src:
+        contents = {name: src.read(name).decode("utf-8") for name in src.namelist()}
+    contents[member] = "\n".join(edit(contents[member].splitlines())) + "\n"
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as dst:
+        for name, text in contents.items():
+            dst.writestr(zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0)), text)
+
+
+def test_modification_flags_after_entry_are_quarantined_and_at_entry_excluded(
+    tiny_dataset: Path, tmp_path: Path
+) -> None:
+    """Amendment 1 of ADR 0003, found by the real-data audit; both implementations must agree.
+
+    Loan A shows 'P' from mid-life without any 'Y' (modification month unknown): quarantined.
+    Loan B shows 'P' on every row, its first included (modified before entry): excluded. A blank
+    first-row flag must not be mistaken for 'P' (DuckDB arg_min skips NULLs).
+    """
+    from prepay.contracts.sflld import PERFORMANCE
+    from prepay.ingest import ingest_all
+    from prepay.ingest.lock import create_lock
+
+    names = [f.name for f in PERFORMANCE.fields]
+    flag, code = names.index("modification_flag"), names.index("zero_balance_code")
+    raw = tmp_path / "raw"
+    shutil.copytree(tiny_dataset / "raw", raw)
+    manifest = json.loads((tiny_dataset / "manifest.json").read_text(encoding="utf-8"))
+    touched = {a["loan_id"] for v in manifest["vintages"] for a in v["anomalies"]}
+    member = "sample_perf_2012.txt"
+    import zipfile
+
+    with zipfile.ZipFile(raw / "sflld" / "sample_2012.zip") as z:
+        lines = z.read(member).decode("utf-8").splitlines()
+    rows: dict[str, list[list[str]]] = collections.defaultdict(list)
+    for line in lines:
+        fields = line.split("|")
+        rows[fields[0]].append(fields)
+    clean = sorted(
+        lid
+        for lid, rs in rows.items()
+        if len(rs) >= 12 and lid not in touched and all(r[flag] == r[code] == "" for r in rs)
+    )
+    loan_a, loan_b = clean[0], clean[1]
+
+    def edit(text_lines: list[str]) -> list[str]:
+        seen: collections.Counter[str] = collections.Counter()
+        out = []
+        for line in text_lines:
+            fields = line.split("|")
+            lid = fields[0]
+            seen[lid] += 1
+            if lid == loan_b or (lid == loan_a and seen[lid] > 6):
+                fields[flag] = "P"
+            out.append("|".join(fields))
+        return out
+
+    _rewrite_perf(raw / "sflld" / "sample_2012.zip", member, edit)
+    lock = create_lock(
+        raw, release=48, terms_reference="", synthetic_manifest=tiny_dataset / "manifest.json"
+    )
+    root = tmp_path / "root"
+    ingest_all(raw, lock, root / "bronze")
+    run_dbt(root, lock)
+    found = {
+        r[0]: r[1:]
+        for r in query(
+            root,
+            "select loan_id, prior_modification_without_y, modified_before_entry, is_quarantined, "
+            f"is_excluded from int_loan_quality where loan_id in ('{loan_a}', '{loan_b}')",
+        )
+    }
+    assert found[loan_a] == (True, False, True, False)
+    assert found[loan_b] == (False, True, False, True)
+    oracle = label_oracle.run(root / "bronze", periods.parse_iso(lock.performance_cutoff_month))
+    assert loan_a in oracle.quarantined
+    assert loan_b in oracle.excluded
+    sql_quarantined = {
+        r[0] for r in query(root, "select loan_id from int_loan_quality where is_quarantined")
+    }
+    sql_excluded = {
+        r[0]
+        for r in query(
+            root, "select loan_id from int_loan_quality where is_excluded and not is_quarantined"
+        )
+    }
+    assert sql_quarantined == oracle.quarantined
+    assert sql_excluded == oracle.excluded

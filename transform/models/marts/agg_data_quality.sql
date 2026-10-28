@@ -4,7 +4,8 @@
     'missing_required_field', 'conflicting_duplicate_period', 'exact_duplicate_period',
     'period_gap', 'rows_after_termination', 'modification_with_terminal_same_month',
     'missing_zero_balance_effective_date', 'multiple_terminal_rows', 'zero_balance_date_mismatch',
-    'modified_before_entry', 'ineligible_product', 'is_quarantined', 'is_excluded'
+    'prior_modification_without_y', 'modified_before_entry', 'ineligible_product',
+    'is_quarantined', 'is_excluded'
 ] %}
 {% for finding in findings %}
     select
