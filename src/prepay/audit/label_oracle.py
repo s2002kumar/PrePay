@@ -1,7 +1,9 @@
 """Independent Python re-implementation of quarantine rules and the MODELING §2 decision table.
 
 Reads the bronze Parquet directly (not the dbt staging layer) and applies the rules with plain
-loops, so a shared SQL misconception cannot make both sides agree.
+loops, so a shared SQL misconception cannot make both sides agree. ``buckets`` restricts it to the
+loans whose ``hash(loan_id) % LOAN_HASH_BUCKETS`` falls in ``[low, high)``, the same stable hash as
+panel sampling, so full-sample audits run in disjoint slices of bounded memory.
 """
 
 from __future__ import annotations
@@ -10,11 +12,13 @@ import collections
 import itertools
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import duckdb
 
 from prepay import periods
 from prepay.contracts.sflld import PERFORMANCE
+from prepay.features.panel import LOAN_HASH_BUCKETS
 
 MATURITY_WINDOW = 2
 
@@ -34,32 +38,45 @@ def _month(text: str) -> int | None:
         return None
 
 
-def run(bronze: Path, cutoff_month: int) -> OracleResult:
+def bucket_clause(buckets: tuple[int, int] | None) -> str:
+    if buckets is None:
+        return "true"
+    low, high = buckets
+    if not 0 <= low < high <= LOAN_HASH_BUCKETS:
+        raise ValueError(f"buckets must satisfy 0 <= low < high <= {LOAN_HASH_BUCKETS}")
+    bucket = f"hash(loan_id) % {LOAN_HASH_BUCKETS}"
+    return f"{bucket} >= {low} and {bucket} < {high}"
+
+
+def run(bronze: Path, cutoff_month: int, buckets: tuple[int, int] | None = None) -> OracleResult:
     con = duckdb.connect()
     root = bronze.as_posix()
+    where = bucket_clause(buckets)
     orig_rows = con.sql(
-        f"select loan_id, first_payment_date, maturity_date, original_interest_rate, "
+        f"select loan_id, first_payment_date, maturity_date, original_interest_rate, "  # noqa: S608
         f"original_upb, original_loan_term, amortization_type, interest_only, _violations "
-        f"from read_parquet('{root}/sflld/*/*/origination.parquet', hive_partitioning=false)"
+        f"from read_parquet('{root}/sflld/*/*/origination.parquet', hive_partitioning=false) "
+        f"where {where}"
     ).fetchall()
     perf_rows = con.sql(
-        f"select * exclude (_source_file) "
-        f"from read_parquet('{root}/sflld/*/*/performance.parquet', hive_partitioning=false)"
+        f"select * exclude (_source_file) "  # noqa: S608
+        f"from read_parquet('{root}/sflld/*/*/performance.parquet', hive_partitioning=false) "
+        f"where {where}"
     ).fetchall()
     perf_columns = [
         d[0]
         for d in con.sql(
-            f"select * exclude (_source_file) "
+            f"select * exclude (_source_file) "  # noqa: S608
             f"from read_parquet('{root}/sflld/*/*/performance.parquet', hive_partitioning=false) "
             f"limit 0"
         ).description
     ]
     col = {name: i for i, name in enumerate(perf_columns)}
 
-    origination: dict[str, list[tuple]] = collections.defaultdict(list)
+    origination: dict[str, list[tuple[Any, ...]]] = collections.defaultdict(list)
     for row in orig_rows:
         origination[row[0]].append(row)
-    performance: dict[str, list[tuple]] = collections.defaultdict(list)
+    performance: dict[str, list[tuple[Any, ...]]] = collections.defaultdict(list)
     for row in perf_rows:
         performance[row[col["loan_id"]]].append(row)
 
@@ -81,7 +98,7 @@ def run(bronze: Path, cutoff_month: int) -> OracleResult:
             _month(o[0][1]) is None or _month(o[0][2]) is None or "" in (o[0][3], o[0][4], o[0][5])
         ):
             reasons.append("missing_required")
-        by_period: dict[str, set[tuple]] = collections.defaultdict(set)
+        by_period: dict[str, set[tuple[Any, ...]]] = collections.defaultdict(set)
         for r in p:
             business = tuple(r[: PERFORMANCE.width])  # raw fields only, not lineage
             by_period[r[col["period"]]].add(business)
@@ -92,7 +109,11 @@ def run(bronze: Path, cutoff_month: int) -> OracleResult:
             reasons.append("bad_period")
         if any(b - a > 1 for a, b in itertools.pairwise(months)):
             reasons.append("gap")
-        terminal = sorted(_month(r[col["period"]]) for r in p if r[col["zero_balance_code"]] != "")
+        terminal = sorted(
+            m
+            for m in (_month(r[col["period"]]) for r in p if r[col["zero_balance_code"]] != "")
+            if m is not None  # an unparseable period is already quarantined as bad_period
+        )
         if terminal and any(m > terminal[0] for m in months):
             reasons.append("after_termination")
         if len(terminal) > 1:
@@ -118,9 +139,11 @@ def run(bronze: Path, cutoff_month: int) -> OracleResult:
         maturity = _month(origination[loan_id][0][2])
         assert first_payment is not None
         assert maturity is not None
-        states = {}
+        states: dict[int, tuple[Any, ...]] = {}
         for r in sorted(rows, key=lambda r: r[col["_source_row"]]):
-            states.setdefault(_month(r[col["period"]]), r)  # first source row wins
+            month = _month(r[col["period"]])
+            assert month is not None  # loans with unparseable periods were quarantined
+            states.setdefault(month, r)  # first source row wins
         ordered = sorted(states)
         event, event_month = None, None
         for m in ordered:

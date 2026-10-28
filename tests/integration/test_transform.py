@@ -14,11 +14,11 @@ import numpy as np
 import pytest
 
 from prepay import periods
+from prepay.audit import label_oracle
 from prepay.contracts import dbt_codegen
 from prepay.ingest.lock import DataLock
 from prepay.synthetic import truth
 from prepay.transform import TransformError, run_dbt, warehouse_path
-from tests.integration import label_oracle
 
 ANOMALY_FINDING = {
     "orphan_performance": "orphan_performance",
