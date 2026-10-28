@@ -1,0 +1,50 @@
+# Builds the demo image (never pushed), checks it becomes healthy and scans its filesystem.
+# Runs on main and on demand: the image build runs the full fictional pipeline (~10 min).
+name: docker
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    name: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.12.1"
+          enable-cache: true
+      - name: Build image (fictional pipeline inside the build)
+        run: docker build -t prepay-demo:ci .
+      - name: Container becomes healthy and declares synthetic artifacts
+        run: |
+          docker run -d --name demo -p 8000:8000 prepay-demo:ci
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/api/health > health.json; then break; fi
+            sleep 2
+          done
+          cat health.json
+          python3 -c "import json; h = json.load(open('health.json')); assert h['artifact_class'] == 'synthetic' and h['data_class'] == 'fictional', h"
+          curl -fsS -o /dev/null -w "ui %{http_code}\n" http://127.0.0.1:8000/scenario-lab
+      - name: Scan the image filesystem with the publication gate
+        run: |
+          docker export demo -o image.tar
+          mkdir image && tar -xf image.tar -C image --exclude='proc/*' --exclude='sys/*' --exclude='dev/*'
+          uv sync --frozen --no-default-groups
+          uv run --frozen prepay --log-level WARNING publication-check --tree image-app=image/srv/prepay
+      - name: Stop container
+        if: always()
+        run: docker rm -f demo || true
