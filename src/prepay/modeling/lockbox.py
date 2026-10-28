@@ -19,11 +19,14 @@ import duckdb
 
 from prepay import periods
 from prepay.evaluation.cohort import backtest as cohort_backtest
+from prepay.evaluation.runoff import runoff_backtest
+from prepay.evaluation.segments import segment_report
 from prepay.features.panel import rate_path_from_bronze
 from prepay.ingest.lock import DataLock
 from prepay.io import read_json, sha256_file, write_json_atomic
 from prepay.modeling import metrics
 from prepay.modeling.registry import MANIFEST, load_run
+from prepay.modeling.train import CREDIT_MIN_VALIDATION_EVENTS
 from prepay.modeling.windows import read_window, standard_windows
 from prepay.provenance import tree_digest
 from prepay.transform import warehouse_path
@@ -95,6 +98,10 @@ def seal(run_dir: Path) -> Seal:
                 "full_payoff_only_CPR_proxy bias/mae",
                 "loan-clustered intervals",
                 "cohort run-off at 6/12/24m vs Aalen-Johansen (hindsight and as-of rates)",
+                "ADR 0006 §7 segment tables (A/E with loan-cluster intervals, poorly served cells)",
+                "ADR 0006 §8 credit metrics only where credit is validated and events >= 100",
+                "ADR 0006 §9 balance run-off: pool factor, principal components, truncated WAL",
+                "ADR 0006 §10 informative-censoring bounds and censored-loan profiles",
             ],
         },
         "report_flags": REPORT_FLAGS,
@@ -129,6 +136,8 @@ def evaluate_lockbox(run_dir: Path, data_root: Path, lock: DataLock) -> dict[str
     cutoff = periods.parse_iso(lock.performance_cutoff_month)
     windows = {w.name: w for w in standard_windows(cutoff)}
     validation = read_json(run_dir / "validation.json")
+    credit = read_json(run_dir / MANIFEST).get("credit_sufficiency")
+    credit_validated = bool(credit and credit["credit_hazard_validated"])
     selected_name = sealed.payload["candidate"]
     con: duckdb.DuckDBPyConnection = duckdb.connect(str(warehouse_path(data_root)), read_only=True)
     results: dict[str, Any] = {}
@@ -166,6 +175,13 @@ def evaluate_lockbox(run_dir: Path, data_root: Path, lock: DataLock) -> dict[str
                 > 2 * base_val["prepay"]["ece"],
                 "paired_difference_vs": differences,
             }
+            credit_events = int((batch.outcome_class == 2).sum())
+            window_result["_credit"] = {
+                "credit_events": credit_events,
+                "metrics_interpretable": credit_validated
+                and credit_events >= CREDIT_MIN_VALIDATION_EVENTS,
+            }
+            window_result["_segments"] = segment_report(batch, predictions)
             results[name] = {"window": windows[name].label, **window_result}
         history = rate_path_from_bronze(data_root / "bronze")
         cohort_models = {
@@ -174,6 +190,17 @@ def evaluate_lockbox(run_dir: Path, data_root: Path, lock: DataLock) -> dict[str
         }
         cohorts = {
             periods.to_iso(windows[name].first - 1): cohort_backtest(
+                con,
+                cohort_models,
+                history,
+                windows[name].first - 1,
+                seal=sealed,
+                cutoff_month=cutoff,
+            )
+            for name in TEST_WINDOWS
+        }
+        runoff = {
+            periods.to_iso(windows[name].first - 1): runoff_backtest(
                 con,
                 cohort_models,
                 history,
@@ -195,6 +222,8 @@ def evaluate_lockbox(run_dir: Path, data_root: Path, lock: DataLock) -> dict[str
         "evaluated_at_utc": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "results": results,
         "cohort_backtests": cohorts,
+        "runoff_backtests": runoff,
+        "credit_sufficiency": credit,
     }
     write_json_atomic(out, report)
     _read_only(out)

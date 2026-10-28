@@ -106,6 +106,45 @@ def test_test_windows_require_a_seal(built: tuple[Path, DataLock]) -> None:
         read_window(con, test_a)
 
 
+def _assert_adr_0006_sections(report: dict) -> None:
+    """Segment tables, credit gating and balance run-off are present and internally consistent."""
+    from prepay.evaluation.segments import DIMENSIONS
+
+    credit = report["credit_sufficiency"]
+    assert set(credit["credit_events"]) == {"train", "validation_a", "validation_b"}
+    for result in report["results"].values():
+        assert set(result["_segments"]["dimensions"]) == {d.name for d in DIMENSIONS}
+        interpretable = result["_credit"]["metrics_interpretable"]
+        assert interpretable == (
+            credit["credit_hazard_validated"] and result["_credit"]["credit_events"] >= 100
+        )
+        rows = sum(
+            cell["rows"]
+            for cell in result["_segments"]["dimensions"]["loan_age_months"].values()
+            if "rows" in cell
+        )
+        assert rows <= result["selected"]["rows"]
+    runoff = report["runoff_backtests"]
+    assert set(runoff) == {"2019-12", "2021-12", "2023-12"}
+    for entry in runoff.values():
+        assert entry["observation_gaps_loan_months"] == 0
+        observed = entry["observed"]
+        factor = observed["pool_factor"]["24m"]
+        interval = observed["pool_factor_interval_at_horizon"]
+        assert 0.0 < factor <= 1.0
+        assert interval["low"] <= factor <= interval["high"]
+        parts = observed["cumulative_principal_fraction"]
+        returned = sum(parts[p]["24m"] for p in ("payoff", "credit_exit", "amortization"))
+        assert returned == pytest.approx(1.0 - factor, abs=1e-9)  # observed balance telescopes
+        for modes in entry["models"].values():
+            for result in modes.values():
+                projected = result["pool_factor"]["24m"]
+                parts = result["cumulative_principal_fraction"]
+                returned = sum(parts[p]["24m"] for p in ("payoff", "credit_exit", "amortization"))
+                assert returned == pytest.approx(1.0 - projected, abs=1e-9)
+                assert 0.0 < result["wal_truncated_years"] <= 2.0
+
+
 def test_seal_and_one_shot_lockbox(
     trained: tuple[Path, list[tuple[int, int]]], built: tuple[Path, DataLock], tmp_path: Path
 ) -> None:
@@ -135,6 +174,13 @@ def test_seal_and_one_shot_lockbox(
             )
             assert low <= entry["realized_aalen_johansen_prepay"] <= high
             assert set(entry["models"]["selected"]) == {"hindsight_rates", "as_of_flat_rates"}
+        bounds = cohort["censoring_sensitivity"]["prepay_incidence"]
+        assert (
+            bounds["bound_censored_never_pay_off"]
+            <= bounds["aalen_johansen"]
+            <= bounds["bound_censored_all_pay_off"]
+        )
+    _assert_adr_0006_sections(report)
     with pytest.raises(LockboxError, match="immutable"):
         evaluate_lockbox(run_dir, root, lock)
 

@@ -56,6 +56,8 @@ log = logging.getLogger(__name__)
 
 SIMPLICITY_ORDER = ("B1_lookup", "B2_logistic", "M1_lightgbm")
 PRIMARY_METRIC = "multiclass_log_loss"
+CREDIT_MIN_TRAIN_EVENTS = 1_000  # ADR 0006 §8
+CREDIT_MIN_VALIDATION_EVENTS = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +76,41 @@ def fit_temperature(p: FloatArray, y: np.ndarray) -> float:
 
     result = minimize_scalar(loss, bounds=(np.log(0.25), np.log(4.0)), method="bounded")
     return float(np.exp(result.x))
+
+
+def credit_sufficiency(
+    con: duckdb.DuckDBPyConnection, windows: dict[str, Window]
+) -> dict[str, Any]:
+    """ADR 0006 §8: whether the credit hazard counts as a validated output.
+
+    Decided on full (unsampled) training and validation counts, before any test window is read.
+    """
+    events = {}
+    for name in ("train", "validation_a", "validation_b"):
+        w = windows[name]
+        events[name] = int(
+            con.sql(
+                "select count(*) from fct_hazard_panel "
+                "where outcome_class = 2 and target_month between $first and $last",
+                params={"first": w.first, "last": w.last},
+            ).fetchall()[0][0]
+        )
+    validated = (
+        events["train"] >= CREDIT_MIN_TRAIN_EVENTS
+        and min(events["validation_a"], events["validation_b"]) >= CREDIT_MIN_VALIDATION_EVENTS
+    )
+    return {
+        "rule": (
+            f"validated only with >= {CREDIT_MIN_TRAIN_EVENTS} training and >= "
+            f"{CREDIT_MIN_VALIDATION_EVENTS} credit dispositions in each validation window"
+        ),
+        "credit_events": events,
+        "credit_hazard_validated": validated,
+        "consequence": None
+        if validated
+        else "credit metrics are descriptive only; projections must treat credit exits as an "
+        "assumption, not a forecast",
+    }
 
 
 def calibration_decision(model: HazardModel, val_b: PanelBatch) -> dict[str, Any]:
@@ -148,6 +185,7 @@ def train(
         )
         val_a = read_window(con, windows["validation_a"])
         val_b = read_window(con, windows["validation_b"])
+        credit = credit_sufficiency(con, windows)
     finally:
         con.close()
     for name, batch in (("train", train_batch), ("validation_a", val_a), ("validation_b", val_b)):
@@ -233,6 +271,7 @@ def train(
         "models": list(models),
         "primary_metric": PRIMARY_METRIC,
         "selection": selection,
+        "credit_sufficiency": credit,
         "gbm_feature_importance_gain": best_gbm[1].feature_importance(),
         "feature_support": feature_support(train_batch),
         "seconds": round(time.perf_counter() - started, 1),
