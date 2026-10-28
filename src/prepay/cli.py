@@ -6,6 +6,7 @@ import argparse
 import dataclasses
 import json
 import logging
+import os
 import sys
 import time
 from collections.abc import Callable, Sequence
@@ -111,6 +112,14 @@ def _cmd_transform(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_benchmark(args: argparse.Namespace) -> int:
+    from prepay.benchmark import run
+
+    result = run(args.preset, Path(args.work_dir), report_dir=Path(args.report_dir))
+    _emit({k: result[k] for k in ("dataset", "stages", "throughput_rows_per_second", "host")})
+    return 0
+
+
 def _cmd_rates_fetch(args: argparse.Namespace) -> int:
     from prepay.ingest.lock import PMMS_SERIES
     from prepay.ingest.pmms import fetch_series
@@ -208,6 +217,15 @@ def build_parser() -> argparse.ArgumentParser:
     transform.add_argument("--dbt-command", default="build", choices=["build", "run", "test"])
     transform.set_defaults(handler=_cmd_transform)
 
+    bench = sub.add_parser(
+        "benchmark",
+        help="measure wall time, peak RSS and throughput of the pipeline on synthetic data",
+    )
+    bench.add_argument("--preset", choices=["ci", "dev", "benchmark"], default="dev")
+    bench.add_argument("--work-dir", default="scratch/benchmark")
+    bench.add_argument("--report-dir", default="reports/benchmarks")
+    bench.set_defaults(handler=_cmd_benchmark)
+
     rates = sub.add_parser("rates", help="public mortgage-rate series")
     rates_sub = rates.add_subparsers(dest="rates_command", required=True)
     fetch = rates_sub.add_parser(
@@ -219,16 +237,33 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _write_resource_report(started: float) -> None:
+    """Record this command's duration and peak RSS when a benchmark asks for it."""
+    target = os.environ.get("PREPAY_RESOURCE_REPORT")
+    if not target:
+        return
+    from prepay.io import write_json_atomic
+    from prepay.resources import peak_rss_bytes
+
+    write_json_atomic(
+        Path(target),
+        {"seconds": round(time.perf_counter() - started, 3), "peak_rss_bytes": peak_rss_bytes()},
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     logs.configure(args.log_level)
     handler: Callable[[argparse.Namespace], int] = args.handler
+    started = time.perf_counter()
     try:
-        return handler(args)
+        code = handler(args)
     except Exception:
         log.exception("command failed", extra={"command": args.command})
         return 1
+    _write_resource_report(started)
+    return code
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ UV ?= uv
 RUN := $(UV) run --frozen
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check lint fmt typecheck test test-finance synth data-lock
+.PHONY: help setup check lint fmt typecheck test test-finance synth data-lock benchmark
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -38,3 +38,6 @@ synth: ## Generate the fictional CI dataset into data/synthetic/ci
 
 data-lock: ## Verify private source files against configs/data.lock.json (local research only)
 	$(RUN) prepay data-lock verify --raw-dir data/raw --lock configs/data.lock.json
+
+benchmark: ## Measure pipeline wall time, peak RSS and throughput (synthetic dev preset)
+	$(RUN) prepay benchmark --preset dev --work-dir scratch/benchmark --report-dir reports/benchmarks
