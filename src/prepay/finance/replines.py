@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
-from prepay.finance.amortization import FloatArray, IntArray
+from prepay.arrays import FloatArray, IntArray
 from prepay.finance.ledger import CreditAssumptions, HazardPaths, LoanLines, project
 from prepay.finance.metrics import cash_wal_years, horizon_summary
 

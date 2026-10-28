@@ -10,8 +10,7 @@ from __future__ import annotations
 import numpy as np
 import numpy.typing as npt
 
-FloatArray = npt.NDArray[np.float64]
-IntArray = npt.NDArray[np.int64]
+from prepay.arrays import FloatArray
 
 
 def level_payment(

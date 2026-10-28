@@ -33,7 +33,7 @@ Last updated: 2026-10-28.
 
 | Milestone | Status | Notes |
 |---|---|---|
-| M0 Foundations | IN PROGRESS | Tooling, CI and finance core with oracle landed; synthetic generator next |
+| M0 Foundations | IN PROGRESS | Tooling, CI, finance core with oracle, source contract, seeded synthetic generator with ground truth and documented anomalies (`docs/SYNTHETIC_DATA.md`); ingest, dbt and the end-to-end synthetic CI path are next |
 | M1 Ingest + provenance | NOT BUILT | |
 | M2 Feature store | NOT BUILT | |
 | M3 ML | NOT BUILT | |

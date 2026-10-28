@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from prepay.finance.amortization import FloatArray
+from prepay.arrays import FloatArray
 from prepay.finance.ledger import CONSERVATION_RTOL, PoolLedger
 from prepay.finance.rates import cpr_from_smm
 
