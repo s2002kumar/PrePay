@@ -53,7 +53,8 @@ def test_bronze_preserves_every_field_with_exact_lineage(
                 name = entry["members"][member]["name"]
                 lines = archive.read(name).decode("utf-8").splitlines()
                 rows = con.sql(
-                    f"select * exclude (_source_file, _source_row), _source_file, _source_row "
+                    f"select * exclude (_source_file, _source_row, _violations), "
+                    f"_source_file, _source_row "
                     f"from read_parquet('{(out / f'{kind}.parquet').as_posix()}', "
                     f"hive_partitioning=false) "
                     f"order by _source_row"
@@ -252,3 +253,22 @@ def test_cli_lock_and_ingest_round_trip(
     assert main(["data-lock", "verify", "--raw-dir", str(raw), "--lock", str(lock_path)]) == 2
     output = io.StringIO(capsys.readouterr().out)
     assert "size changed: pmms/MORTGAGE30US.csv" in output.getvalue()
+
+
+def test_violation_bitmask_flags_exactly_the_invalid_rows(
+    raw: Path, tiny_dataset: Path, tmp_path: Path
+) -> None:
+    ingest_all(raw, lock_for(raw, tiny_dataset), tmp_path / "bronze")
+    pattern = (tmp_path / "bronze" / "sflld" / "*" / "*" / "performance.parquet").as_posix()
+    flagged = duckdb.sql(
+        f"select loan_id, period, _violations from read_parquet('{pattern}') where _violations <> 0"
+    ).fetchall()
+    manifest = json.loads((tiny_dataset / "manifest.json").read_text(encoding="utf-8"))
+    injected = {
+        (a["loan_id"], a["period"])
+        for v in manifest["vintages"]
+        for a in v["anomalies"]
+        if a["kind"] == "invalid_zero_balance_code"
+    }
+    assert {(lid, per) for lid, per, _ in flagged} == injected
+    assert {bits for _, _, bits in flagged} == {1 << 8}  # zero_balance_code is field 9
