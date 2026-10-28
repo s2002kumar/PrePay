@@ -198,6 +198,27 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_publication_check(args: argparse.Namespace) -> int:
+    from prepay.publication import scan_history, scan_repository, scan_tree
+
+    root = Path(args.root)
+    findings = scan_repository(root)
+    for spec in args.tree:
+        label, _, path = spec.partition("=")
+        findings += scan_tree(Path(path), label)
+    if args.history:
+        findings += scan_history(root)
+    _emit(
+        {
+            "ok": not findings,
+            "findings": [
+                {"location": f.location, "rule": f.rule, "detail": f.detail} for f in findings
+            ],
+        }
+    )
+    return 0 if not findings else 3
+
+
 def _cmd_benchmark(args: argparse.Namespace) -> int:
     from prepay.benchmark import run
 
@@ -363,6 +384,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="trust X-Forwarded-For (only behind a trusted reverse proxy)",
     )
     serve.set_defaults(handler=_cmd_serve)
+
+    publication = sub.add_parser(
+        "publication-check",
+        help="fail (exit 3) if tracked files or build outputs contain restricted data or secrets",
+    )
+    publication.add_argument("--root", default=".")
+    publication.add_argument(
+        "--tree",
+        action="append",
+        default=[],
+        metavar="LABEL=PATH",
+        help="also scan a build output, e.g. web=web/dist or demo=build/demo",
+    )
+    publication.add_argument(
+        "--history", action="store_true", help="also scan all Git history for credential patterns"
+    )
+    publication.set_defaults(handler=_cmd_publication_check)
 
     bench = sub.add_parser(
         "benchmark",

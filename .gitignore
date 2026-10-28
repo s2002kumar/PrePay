@@ -55,3 +55,10 @@ Thumbs.db
 
 # Claude Code machine-local preferences (not project policy)
 /.claude/settings.local.json
+
+# Web toolchain outputs
+node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+*.tsbuildinfo
