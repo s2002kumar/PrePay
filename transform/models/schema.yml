@@ -1,0 +1,91 @@
+version: 2
+
+models:
+  - name: stg_pmms
+    columns:
+      - name: series
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["MORTGAGE30US", "MORTGAGE15US"]
+
+  - name: int_monthly_rates
+    description: Month-end as-of PMMS rates (percent per year), one row per calendar month.
+    columns:
+      - name: month
+        data_tests: [unique, not_null]
+
+  - name: int_loan_quality
+    description: Per-loan data-quality findings; quarantined loans never reach the gold layer.
+    columns:
+      - name: loan_id
+        data_tests: [unique, not_null]
+
+  - name: int_loans
+    columns:
+      - name: loan_id
+        data_tests: [unique, not_null]
+      - name: first_payment_month
+        data_tests: [not_null]
+      - name: maturity_month
+        data_tests: [not_null]
+      - name: note_rate_pct
+        data_tests: [not_null]
+
+  - name: int_exit_events
+    description: First event per eligible loan (MODELING §2 decision table).
+    columns:
+      - name: loan_id
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('int_loans')
+                field: loan_id
+      - name: event_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["prepay", "credit", "maturity", "censor_modification",
+                         "censor_whole_loan_sale", "censor_reperforming_securitization",
+                         "censor_defect", "censor_administrative", "censor_unexplained_end"]
+      - name: event_month
+        data_tests: [not_null]
+
+  - name: fct_hazard_panel
+    description: >
+      Gold at-risk loan-month panel with point-in-time features (as of t-1) and the month-t
+      outcome P (full voluntary payoff), C (terminal credit disposition) or A (remains active).
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            columns: ["loan_id", "target_month"]
+    columns:
+      - name: outcome
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["P", "C", "A"]
+      - name: outcome_class
+        data_tests: [not_null]
+      - name: exposure_upb
+        data_tests: [not_null]
+      - name: market_rate_t1
+        data_tests: [not_null]
+      - name: incentive_bps
+        data_tests: [not_null]
+      - name: burnout_months
+        data_tests: [not_null]
+
+  - name: fct_cohort_events
+    columns:
+      - name: loan_id
+        data_tests: [unique, not_null]
+
+  - name: fct_monthly_exposures
+    columns:
+      - name: target_month
+        data_tests: [unique, not_null]

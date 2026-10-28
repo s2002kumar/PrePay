@@ -15,9 +15,10 @@ setup: ## Install the pinned Python environment from uv.lock
 
 check: lint typecheck test ## Full offline synthetic quality gate (CI runs exactly this)
 
-lint: ## Ruff lint and format check
+lint: ## Ruff lint/format check and SQLFluff on the dbt project
 	$(RUN) ruff check src tests
 	$(RUN) ruff format --check src tests
+	$(RUN) sqlfluff lint transform/models transform/tests
 
 fmt: ## Apply Ruff formatting and safe fixes
 	$(RUN) ruff format src tests

@@ -1,0 +1,9 @@
+# Local DuckDB warehouse. No credentials: paths come from environment variables set by
+# `prepay transform` (PREPAY_WAREHOUSE) so the same project runs on synthetic or private data.
+prepay:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: "{{ env_var('PREPAY_WAREHOUSE') }}"
+      threads: 4
