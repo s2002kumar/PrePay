@@ -47,8 +47,8 @@ def test_manifest_describes_a_fictional_dataset(tiny_dataset: Path) -> None:
     assert "not Freddie Mac data" in m["notice"]
     assert m["layout"]["origination_fingerprint"] == ORIGINATION.fingerprint()
     assert m["layout"]["performance_fingerprint"] == PERFORMANCE.fingerprint()
-    assert [v["vintage"] for v in m["vintages"]] == list(range(2015, 2027))
-    assert m["totals"]["loans"] == sum(TINY_CONFIG.loans_in(v) for v in range(2015, 2027))
+    assert [v["vintage"] for v in m["vintages"]] == list(range(2006, 2027))
+    assert m["totals"]["loans"] == sum(TINY_CONFIG.loans_in(v) for v in range(2006, 2027))
 
 
 def test_every_value_conforms_except_declared_anomalies(tiny_dataset: Path) -> None:

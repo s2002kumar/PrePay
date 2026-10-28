@@ -21,8 +21,8 @@ Last updated: 2026-10-28.
 | P1 | Source schema + provenance | IMPLEMENTED-SYNTHETIC | `src/prepay/contracts/`, `src/prepay/ingest/`, ADR 0002, `tests/integration/test_ingest.py` | Layout header-verified against official files; data lock + checksums + byte-exact bronze lineage; pre-R47 fallback BLOCKED (no official layout artifact); real-file verification BLOCKED on data |
 | P2 | Deterministic, idempotent pipelines | IMPLEMENTED-SYNTHETIC (ingest) | `test_rerun_reuses_outputs_and_detects_tampering`; byte-identical bronze on rerun | dbt/model stages not built yet |
 | P3 | Point-in-time 3-state targets | IMPLEMENTED-SYNTHETIC | `transform/`, ADR 0003, `tests/integration/test_transform.py` (SQL = independent Python oracle; features reproduce generator truth < 1e-9; leakage/chronology guards proven to fail on corrupted data) | Real-data counts for date-mismatch and unexplained-end rules pending data |
-| P4 | Reproducible trained models | NOT BUILT | — | — |
-| P5 | Sealed future holdouts | NOT BUILT | — | Real holdouts blocked on data |
+| P4 | Reproducible trained models | IMPLEMENTED-SYNTHETIC | `src/prepay/modeling/`, ADR 0004, `tests/unit/test_models.py`, `tests/integration/test_modeling.py` | B0/B1/B2/M1 + calibration + run registry with digests on synthetic data only; drift (PSI), seed repeats, ablations and segment reports not built |
+| P5 | Sealed future holdouts | IMPLEMENTED-SYNTHETIC (mechanism) | seal + one-shot lockbox; holdout guard tested with a reader spy; tamper and second-evaluation refusals tested | Real holdout evaluation BLOCKED on data |
 | P6 | Cash-flow conventions + conservation | IMPLEMENTED-SYNTHETIC (partial) | `make test-finance`; ADR 0001 | §6.7 rate-shock invariance awaits the scenario layer; §6.9 rep-line error table not yet published |
 | P7 | Pooled 12/24m backtests | NOT BUILT | — | Blocked on data for real cohorts |
 | P8 | Interactive demo | NOT BUILT | — | Hosting not approved |
@@ -33,10 +33,10 @@ Last updated: 2026-10-28.
 
 | Milestone | Status | Notes |
 |---|---|---|
-| M0 Foundations | IN PROGRESS | Tooling, CI, finance core with oracle, source contract, synthetic generator (`docs/SYNTHETIC_DATA.md`); remaining: end-to-end CI path through a simple model + finance projection (lands with M3) |
+| M0 Foundations | IMPLEMENTED-SYNTHETIC | Includes the CI end-to-end path: synthetic ingest → dbt → trained model → finance projection (`test_end_to_end_model_hazards_drive_a_conserving_projection`) |
 | M1 Ingest + provenance | IMPLEMENTED-SYNTHETIC | Streaming ZIP to bronze Parquet, data lock, FRED PMMS ingest + local fetch, per-field violation counts; real-data run BLOCKED on data |
 | M2 Feature store | IMPLEMENTED-SYNTHETIC | dbt silver/gold + Python scenario feature state machine with exact historical parity; benchmark baseline in `docs/BENCHMARKS.md`; reviewer packet `docs/reviews/M2.md` |
-| M3 ML | NOT BUILT | |
+| M3 ML | IMPLEMENTED-SYNTHETIC | Models, validation-only selection, cross-fitted calibration, seal/lockbox; trained only on synthetic data; real training BLOCKED on data |
 | M4 Finance engine + freeze | NOT BUILT | Engine core exists (see P6); cohort study and sealing not built |
 | M5 Product + publication | NOT BUILT | |
 

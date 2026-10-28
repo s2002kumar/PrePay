@@ -29,9 +29,10 @@ settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "ci"))
 
 
 # --------------------------------------------------------------------------- synthetic data
-#: Small multi-block dataset spanning every MODELING §5 window (2015..2026, cutoff 2026-06).
+#: Small multi-block dataset spanning every MODELING §5 window (2006..2026, cutoff 2026-06); the
+#: training window includes the fictional 2008-2011 credit stress so every class occurs.
 TINY_CONFIG = SyntheticConfig(
-    seed=11, first_vintage=2015, last_vintage=2026, loans_per_vintage=60, block_size=25
+    seed=11, first_vintage=2006, last_vintage=2026, loans_per_vintage=80, block_size=30
 )
 
 
