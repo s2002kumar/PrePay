@@ -33,9 +33,9 @@ Last updated: 2026-10-28.
 
 | Milestone | Status | Notes |
 |---|---|---|
-| M0 Foundations | IN PROGRESS | Tooling, CI, finance core with oracle, source contract, seeded synthetic generator with ground truth and documented anomalies (`docs/SYNTHETIC_DATA.md`); ingest, dbt and the end-to-end synthetic CI path are next |
+| M0 Foundations | IN PROGRESS | Tooling, CI, finance core with oracle, source contract, synthetic generator (`docs/SYNTHETIC_DATA.md`); remaining: end-to-end CI path through a simple model + finance projection (lands with M3) |
 | M1 Ingest + provenance | IMPLEMENTED-SYNTHETIC | Streaming ZIP to bronze Parquet, data lock, FRED PMMS ingest + local fetch, per-field violation counts; real-data run BLOCKED on data |
-| M2 Feature store | IN PROGRESS | dbt staging/intermediate/marts with quarantine, events, at-risk panel and as-of features; Python scenario feature state machine + parity next |
+| M2 Feature store | IMPLEMENTED-SYNTHETIC | dbt silver/gold + Python scenario feature state machine with exact historical parity; benchmark baseline in `docs/BENCHMARKS.md`; reviewer packet `docs/reviews/M2.md` |
 | M3 ML | NOT BUILT | |
 | M4 Finance engine + freeze | NOT BUILT | Engine core exists (see P6); cohort study and sealing not built |
 | M5 Product + publication | NOT BUILT | |
