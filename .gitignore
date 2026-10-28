@@ -1,0 +1,57 @@
+# Data, models and generated output
+/data/
+/artifacts/
+/reports/
+/scratch/
+*.duckdb
+*.duckdb.wal
+*.parquet
+*.zip
+sample_*.txt
+orig_*.txt
+perf_*.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# dbt
+transform/target/
+transform/logs/
+transform/dbt_packages/
+transform/.user.yml
+
+# Notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Private local milestone logs and research notes
+/notes/
+
+# Sensitive keys and development backups
+*.pem
+*.p12
+*.pfx
+*.bak
+
+# Claude Code machine-local preferences (not project policy)
+/.claude/settings.local.json
