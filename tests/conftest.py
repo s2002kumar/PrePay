@@ -8,8 +8,11 @@ import pathlib
 import pytest
 from hypothesis import HealthCheck, settings
 
+from prepay.ingest import ingest_all
+from prepay.ingest.lock import DataLock, create_lock
 from prepay.synthetic.config import SyntheticConfig
 from prepay.synthetic.dataset import generate_dataset
+from prepay.transform import run_dbt
 
 # "ci" (default) derandomizes Hypothesis so every run explores the same examples; use
 # HYPOTHESIS_PROFILE=explore locally to search new random examples.
@@ -38,3 +41,19 @@ def tiny_dataset(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
     root = tmp_path_factory.mktemp("synthetic")
     generate_dataset(TINY_CONFIG, root)
     return root
+
+
+@pytest.fixture(scope="session")
+def built(
+    tiny_dataset: pathlib.Path, tmp_path_factory: pytest.TempPathFactory
+) -> tuple[pathlib.Path, DataLock]:
+    root = tmp_path_factory.mktemp("pipeline")
+    lock = create_lock(
+        tiny_dataset / "raw",
+        release=48,
+        terms_reference="",
+        synthetic_manifest=tiny_dataset / "manifest.json",
+    )
+    ingest_all(tiny_dataset / "raw", lock, root / "bronze")
+    run_dbt(root, lock)
+    return root, lock

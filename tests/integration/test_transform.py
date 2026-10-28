@@ -15,8 +15,7 @@ import pytest
 
 from prepay import periods
 from prepay.contracts import dbt_codegen
-from prepay.ingest import ingest_all
-from prepay.ingest.lock import DataLock, create_lock
+from prepay.ingest.lock import DataLock
 from prepay.synthetic import truth
 from prepay.transform import TransformError, run_dbt, warehouse_path
 from tests.integration import label_oracle
@@ -32,20 +31,6 @@ ANOMALY_FINDING = {
     "missing_zero_balance_effective_date": "missing_zero_balance_effective_date",
     "duplicate_origination": "duplicate_origination",
 }
-
-
-@pytest.fixture(scope="session")
-def built(tiny_dataset: Path, tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, DataLock]:
-    root = tmp_path_factory.mktemp("pipeline")
-    lock = create_lock(
-        tiny_dataset / "raw",
-        release=48,
-        terms_reference="",
-        synthetic_manifest=tiny_dataset / "manifest.json",
-    )
-    ingest_all(tiny_dataset / "raw", lock, root / "bronze")
-    run_dbt(root, lock)
-    return root, lock
 
 
 def query(root: Path, sql: str) -> list[tuple]:
