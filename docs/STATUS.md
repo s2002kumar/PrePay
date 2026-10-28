@@ -18,7 +18,7 @@ Last updated: 2026-10-28.
 
 | ID | Gate | Status | Evidence | Known gaps |
 |---|---|---|---|---|
-| P1 | Source schema + provenance | NOT BUILT | — | Official R47/R48 layout obtained and checksummed (see SOURCE_RESEARCH); adapter not built yet |
+| P1 | Source schema + provenance | IN PROGRESS | `src/prepay/contracts/sflld.py`, ADR 0002, `tests/unit/test_contracts.py` | Layout for R47/R48 transcribed from checksummed official documents and header-verified; ingest not built; pre-R47 fallback BLOCKED (no official layout artifact); real-file verification blocked on data |
 | P2 | Deterministic, idempotent pipelines | NOT BUILT | — | — |
 | P3 | Point-in-time 3-state targets | NOT BUILT | — | — |
 | P4 | Reproducible trained models | NOT BUILT | — | — |

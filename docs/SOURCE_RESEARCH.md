@@ -34,3 +34,35 @@ Checked 2026-10-27 using primary-source public pages and official documents. Thi
 - Two independent binary hazards followed by clipping `p+d<=1` can give mathematically incoherent/calibration-distorted probabilities.
 - Requiring a GBM win on every untouched period encouraged data leakage and distorted reporting; empirical non-win is an equally valid research result.
 - Treating credit-related disposition principal as immediately received cash, or treating hypothetical accrued interest as collected cash, would materially overstate financial certainty.
+
+## Addendum: verified 2026-10-28 (implementation start)
+
+Primary sources were fetched and checksummed when implementation began. See
+`docs/decisions/0002-sflld-source-contract.md` for hashes and the resulting contract.
+
+- **Release 48 is current.** Published 2026-10-28; origination and performance cutoff
+  **2026-06-30** (the dataset page now says performance through June 30, 2026, superseding the
+  March 31, 2026 figure above). Release 47 (2026-07-29) had cutoffs of 2026-03-31.
+- The URL cited in item 2 (`general_user_guide_july_2026.pdf`) now serves the **Release 48**
+  guide (October 2026). Its layout is identical to Release 47's: origination 31 fields,
+  performance 35 fields. The official header files match `src/prepay/contracts/sflld.py`
+  byte for byte.
+- Release 47 changes that matter for parsing and labels: `Loan Sequence Number` became
+  `Loan Identifier`; delinquency status is now two-character `00`, `01`, … with `RA` and
+  `XX` = not available; payment deferral flag is `C`/`P` (was `Y`/`P`); recoveries and gains
+  are now negative and expenses and losses positive; cumulative modification cost is disclosed every
+  month after the first modification; postal code is three digits (`000` = unknown).
+- Monthly reporting period conventions changed twice: cycles through April 2019 ran 16th–15th
+  for scheduled P&I; May 2019–September 2025 used calendar months; from October 2025
+  curtailments and prepayments received by the 2nd business day of the next month are included.
+  For periods on or before September 2025, delinquency `00` can also mean "cycle before first
+  payment date". These transitions line up with MODELING §5's flagged 2019-05 and 2025-10
+  months.
+- `Actual Loss` is computed for zero-balance codes 02, 03, 09 **and 15**, and set to null
+  for dispositions in the three months before the performance cutoff.
+- FRED PMMS CSV (`fredgraph.csv?id=MORTGAGE30US`) has the header `observation_date,MORTGAGE30US`,
+  ISO dates, one row per weekly observation, and values in percent per year. As of 2026-10-22
+  the 30-year rate was 7.32%.
+
+Still open: whether this researcher's download is R47 or R48 (declared in `configs/data.lock.json`
+at download time), trailing-delimiter behavior, and non-numeric Net Sales Proceeds markers.
