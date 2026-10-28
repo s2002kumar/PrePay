@@ -17,7 +17,12 @@ dependencies = [
 prepay = "prepay.cli:main"
 
 [dependency-groups]
+api = [
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+]
 dev = [
+    "httpx2>=2.16.0",
     "hypothesis>=6.112",
     "mypy>=1.13",
     "pytest>=8.3",
@@ -38,7 +43,7 @@ build-backend = "hatchling.build"
 packages = ["src/prepay"]
 
 [tool.uv]
-default-groups = ["dev", "transform"]
+default-groups = ["dev", "transform", "api"]
 
 # ---------------------------------------------------------------- ruff
 [tool.ruff]
@@ -69,6 +74,7 @@ warn_unreachable = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 mypy_path = "src"
 packages = ["prepay"]
+plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]

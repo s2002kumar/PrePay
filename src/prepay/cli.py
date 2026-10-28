@@ -174,6 +174,30 @@ def _cmd_finance_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_demo_build(args: argparse.Namespace) -> int:
+    from prepay.api.bundle import build_bundle
+
+    out = build_bundle(Path(args.out), preset=args.preset)
+    _emit({"bundle": out.as_posix(), "preset": args.preset})
+    return 0
+
+
+def _cmd_serve(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from prepay.api.app import create_app
+
+    static = Path(args.web_dist) if args.web_dist else None
+    uvicorn.run(
+        create_app(Path(args.bundle), static),
+        host=args.host,
+        port=args.port,
+        proxy_headers=args.proxy_headers,
+        server_header=False,
+    )
+    return 0
+
+
 def _cmd_benchmark(args: argparse.Namespace) -> int:
     from prepay.benchmark import run
 
@@ -317,6 +341,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     report.add_argument("--out", default="docs/validation/FINANCE_ENGINE.md")
     report.set_defaults(handler=_cmd_finance_report)
+
+    demo = sub.add_parser("demo", help="public demo bundle (fictional data only)")
+    demo_sub = demo.add_subparsers(dest="demo_command", required=True)
+    demo_build = demo_sub.add_parser(
+        "build",
+        help="run the fictional pipeline end to end and assemble a sealed demo bundle",
+    )
+    demo_build.add_argument("--out", default="build/demo")
+    demo_build.add_argument("--preset", choices=["ci", "dev"], default="ci")
+    demo_build.set_defaults(handler=_cmd_demo_build)
+
+    serve = sub.add_parser("serve", help="serve the demo API and web UI (fictional data only)")
+    serve.add_argument("--bundle", default="build/demo")
+    serve.add_argument("--web-dist", default="web/dist")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument(
+        "--proxy-headers",
+        action="store_true",
+        help="trust X-Forwarded-For (only behind a trusted reverse proxy)",
+    )
+    serve.set_defaults(handler=_cmd_serve)
 
     bench = sub.add_parser(
         "benchmark",
