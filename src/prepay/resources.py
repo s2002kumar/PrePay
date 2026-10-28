@@ -10,16 +10,32 @@ import sys
 def peak_rss_bytes() -> int:
     """Peak resident set size of the current process, in bytes.
 
-    Windows: ``PeakWorkingSetSize`` from ``GetProcessMemoryInfo``. Linux: ``ru_maxrss`` (KiB).
-    macOS: ``ru_maxrss`` (bytes).
+    Windows: ``PeakWorkingSetSize`` from ``GetProcessMemoryInfo``. Linux: ``VmHWM`` from
+    ``/proc/self/status``, which belongs to this process's address space. ``ru_maxrss`` is inherited
+    across fork/exec, so a child of a large parent would report the parent's peak. Other POSIX:
+    ``ru_maxrss`` (bytes on macOS).
     """
     if sys.platform == "win32":
         return _windows_peak_working_set()
     else:  # noqa: RET505 - a platform branch mypy can type-check per OS
+        hwm = _proc_vm_hwm()
+        if hwm is not None:
+            return hwm
         import resource
 
         peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         return int(peak if sys.platform == "darwin" else peak * 1024)
+
+
+def _proc_vm_hwm() -> int | None:
+    try:
+        with open("/proc/self/status", encoding="ascii") as status:
+            for line in status:
+                if line.startswith("VmHWM:"):
+                    return int(line.split()[1]) * 1024
+    except OSError:
+        return None
+    return None
 
 
 if sys.platform == "win32":
