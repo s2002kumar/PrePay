@@ -29,8 +29,24 @@ def _numeric(column: pa.ChunkedArray) -> FloatArray:
     return np.asarray(column.cast(pa.float64()).to_numpy(zero_copy_only=False), dtype=np.float64)
 
 
+def _dictionary(column: pa.ChunkedArray) -> tuple[ObjectArray, IntArray]:
+    """Distinct values (``None`` last, for nulls) and each row's index into them."""
+    encoded = column.combine_chunks().dictionary_encode()
+    values = encoded.dictionary.to_pylist()
+    lookup = np.empty(len(values) + 1, dtype=object)
+    lookup[: len(values)] = values
+    codes = encoded.indices.fill_null(len(values)).to_numpy(zero_copy_only=False)
+    return lookup, np.asarray(codes, dtype=np.int64)
+
+
 def _categorical(column: pa.ChunkedArray) -> ObjectArray:
-    return np.asarray(column.to_pylist(), dtype=object)
+    """Object array in which equal values share one Python object.
+
+    Materializing one string per row would cost tens of bytes per row and column at full sample
+    scale; dictionary decoding keeps one pointer per row.
+    """
+    lookup, codes = _dictionary(column)
+    return np.asarray(lookup[codes], dtype=object)
 
 
 def sample_clause(sample_fraction: float | None) -> str:
@@ -66,16 +82,18 @@ def read_panel(
     for name in NUMERIC:
         features[name] = _numeric(table[name])
     for name in CATEGORICAL:
-        values = _categorical(table[name])
+        lookup, codes = _dictionary(table[name])
         if name == "month_of_year":
-            values = np.asarray([None if v is None else int(v) for v in values], dtype=object)
-        features[name] = values
+            lookup = np.asarray([None if v is None else int(v) for v in lookup], dtype=object)
+        features[name] = np.asarray(lookup[codes], dtype=object)
+    loan_lookup, loan_code = _dictionary(table["loan_id"])
     return PanelBatch(
-        loan_id=_categorical(table["loan_id"]),
+        loan_id=np.asarray(loan_lookup[loan_code], dtype=object),
         target_month=np.asarray(table["target_month"].to_numpy(), dtype=np.int64),
         outcome_class=np.asarray(table["outcome_class"].to_numpy(), dtype=np.int64),
         exposure_upb=_numeric(table["exposure_upb"]),
         features=features,
+        loan_code=loan_code,
     )
 
 

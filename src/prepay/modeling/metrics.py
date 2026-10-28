@@ -125,15 +125,22 @@ class Interval:
 
 
 def cluster_bootstrap_mean(
-    loan_id: np.ndarray, values: FloatArray, *, replicates: int = 200, seed: int = 20261028
+    clusters: np.ndarray, values: FloatArray, *, replicates: int = 200, seed: int = 20261028
 ) -> Interval:
-    """95% percentile interval of a row mean, resampling loans with replacement."""
-    _, cluster = np.unique(loan_id, return_inverse=True)
+    """95% percentile interval of a row mean, resampling loans (clusters) with replacement.
+
+    ``clusters`` is any per-row loan key; integer codes (``PanelBatch.clusters()``) are fastest.
+    Replicates are drawn one at a time so memory stays O(loans), not O(replicates x loans).
+    """
+    _, cluster = np.unique(clusters, return_inverse=True)
     sums = np.bincount(cluster, weights=values)
     counts = np.bincount(cluster).astype(np.float64)
     rng = np.random.Generator(np.random.PCG64(seed))
-    draws = rng.integers(0, sums.shape[0], size=(replicates, sums.shape[0]))
-    means = sums[draws].sum(axis=1) / counts[draws].sum(axis=1)
+    n = sums.shape[0]
+    means = np.empty(replicates)
+    for b in range(replicates):
+        pick = rng.integers(0, n, size=n)
+        means[b] = sums[pick].sum() / counts[pick].sum()
     return Interval(
         float(values.mean()), float(np.quantile(means, 0.025)), float(np.quantile(means, 0.975))
     )
@@ -145,7 +152,7 @@ def evaluate(batch: PanelBatch, p: FloatArray, *, bootstrap: bool = True) -> dic
     brier = row_brier(p, y)
     result: dict[str, Any] = {
         "rows": batch.rows,
-        "loans": len(np.unique(batch.loan_id)),
+        "loans": int(batch.clusters().max(initial=-1)) + 1,
         "events": {"prepay": int((y == 1).sum()), "credit": int((y == 2).sum())},
         "log_loss": float(ll.mean()),
         "brier": float(brier.mean()),
@@ -159,8 +166,9 @@ def evaluate(batch: PanelBatch, p: FloatArray, *, bootstrap: bool = True) -> dic
         result[name]["ece"] = expected_calibration_error(table)
         result[name]["mean_predicted"] = float(p[:, column].mean())
     if bootstrap:
-        result["log_loss_interval"] = cluster_bootstrap_mean(batch.loan_id, ll).as_dict()
-        result["brier_interval"] = cluster_bootstrap_mean(batch.loan_id, brier).as_dict()
+        clusters = batch.clusters()
+        result["log_loss_interval"] = cluster_bootstrap_mean(clusters, ll).as_dict()
+        result["brier_interval"] = cluster_bootstrap_mean(clusters, brier).as_dict()
     return result
 
 
@@ -171,4 +179,4 @@ def paired_difference(
     diff = row_log_loss(p_candidate, batch.outcome_class) - row_log_loss(
         p_reference, batch.outcome_class
     )
-    return cluster_bootstrap_mean(batch.loan_id, diff).as_dict()
+    return cluster_bootstrap_mean(batch.clusters(), diff).as_dict()
