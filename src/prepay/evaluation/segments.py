@@ -206,12 +206,17 @@ def segment_report(
     selected: str = "selected",
     replicates: int = 200,
     seed: int = 20261028,
+    dimensions: tuple[Dimension, ...] = DIMENSIONS,
 ) -> dict[str, Any]:
-    """Every pre-registered dimension and cell for one window (ADR 0006 §7)."""
+    """Every dimension and cell for one window: by default the ADR 0006 §7 segments.
+
+    Other callers pass their own dimensions, for example the public-rate regimes of
+    :mod:`prepay.evaluation.regimes` (ADR 0009 §5).
+    """
     weight = remaining_after_scheduled(batch)
     clusters = batch.clusters()
-    dimensions: dict[str, Any] = {}
-    for dimension in DIMENSIONS:
+    report: dict[str, Any] = {}
+    for dimension in dimensions:
         labels = dimension.assign(batch)
         ordered = dimension.labels
         if "missing" not in ordered:  # e.g. an incentive with no market rate
@@ -231,10 +236,10 @@ def segment_report(
                 replicates=replicates,
                 seed=seed,
             )
-        dimensions[dimension.name] = cells
+        report[dimension.name] = cells
     poorly_served = [
         f"{name}={label}"
-        for name, cells in dimensions.items()
+        for name, cells in report.items()
         for label, cell in cells.items()
         if cell.get("poorly_served")
     ]
@@ -249,6 +254,6 @@ def segment_report(
             "credit_ae_min_events": MIN_CREDIT_EVENTS,
             "poorly_served": f"selected model's A/E interval entirely outside {list(POOR_BAND)}",
         },
-        "dimensions": dimensions,
+        "dimensions": report,
         "poorly_served_cells": poorly_served,
     }

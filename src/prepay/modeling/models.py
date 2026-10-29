@@ -229,10 +229,13 @@ class GbmModel(HazardModel):
         num_leaves: int,
         max_rounds: int = 2000,
         early_stopping: int = 50,
+        seed: int | None = None,
     ) -> GbmModel:
         import lightgbm as lgb
 
         params = {**GBM_BASE_PARAMS, "num_leaves": num_leaves}
+        if seed is not None:
+            params["seed"] = seed
         categorical = pre.tree_categorical_indices()
         train_set = lgb.Dataset(
             pre.tree_matrix(train),

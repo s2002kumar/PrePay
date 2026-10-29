@@ -11,8 +11,12 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from prepay import __version__, logs
+
+if TYPE_CHECKING:
+    from prepay.modeling.experiment import ExperimentConfig
 
 log = logging.getLogger("prepay.cli")
 
@@ -207,6 +211,64 @@ def _cmd_rate_regimes(args: argparse.Namespace) -> int:
     report = rate_regime_facts(rates, standard_windows(periods.parse_iso(args.cutoff)))
     write_json_atomic(Path(args.out), report)
     _emit({"out": args.out, "train_era_check": report["train_era_check"]})
+    return 0
+
+
+def _experiment_config(args: argparse.Namespace, base: ExperimentConfig) -> ExperimentConfig:
+    models = tuple(args.models.split(",")) if args.models else base.models
+    designated = base.designated if base.designated in models else models[0]
+    return dataclasses.replace(
+        base,
+        models=models,
+        designated=designated,
+        train_sample_fraction=args.train_sample_fraction,
+    )
+
+
+def _cmd_experiment_run(args: argparse.Namespace) -> int:
+    from prepay import periods
+    from prepay.ingest.lock import read_lock
+    from prepay.modeling.experiment import preset, run_experiment
+
+    lock = read_lock(Path(args.lock))
+    cutoff = periods.parse_iso(lock.performance_cutoff_month)
+    config = _experiment_config(args, preset(args.preset, cutoff))
+    run_dir = run_experiment(
+        Path(args.data_root),
+        lock,
+        Path(args.out),
+        config,
+        allow_opened=args.exploratory_opened_windows,
+    )
+    _emit({"run": run_dir.as_posix(), "status": "written"})
+    return 0
+
+
+def _cmd_experiment_rolling(args: argparse.Namespace) -> int:
+    from prepay import periods
+    from prepay.ingest.lock import read_lock
+    from prepay.modeling.experiment import (
+        DEVELOPMENT_FAMILIES,
+        V1_ORIGINS,
+        ExperimentConfig,
+        ExperimentWindows,
+        rolling_origin,
+    )
+
+    origins = (
+        tuple(periods.parse_iso(o) for o in args.origins.split(",")) if args.origins else V1_ORIGINS
+    )
+    base = ExperimentConfig(
+        "V1",
+        ExperimentWindows.rolling_origin(origins[0]),
+        DEVELOPMENT_FAMILIES,
+        designated="B2_logistic",
+    )
+    config = _experiment_config(args, base)
+    target = rolling_origin(
+        Path(args.data_root), read_lock(Path(args.lock)), Path(args.out), config, origins
+    )
+    _emit({"report": target.as_posix(), "status": "written"})
     return 0
 
 
@@ -507,6 +569,49 @@ def build_parser() -> argparse.ArgumentParser:
     regimes.add_argument("--cutoff", default="2026-06", help="performance cutoff, YYYY-MM")
     regimes.add_argument("--out", required=True, help="JSON report path")
     regimes.set_defaults(handler=_cmd_rate_regimes)
+
+    experiment = sub.add_parser(
+        "experiment",
+        help="reliability-program experiment runs (ADR 0009/0010); never the primary study",
+    )
+    experiment_sub = experiment.add_subparsers(dest="experiment_command", required=True)
+    exp_run = experiment_sub.add_parser(
+        "run",
+        help="fit a registered member run (DEV2017 or REFIT2026) for forward evaluation",
+        description=(
+            "Fits the preset's families on its windows, decides each model's calibration on its "
+            "calibration window, and writes an immutable run directory. Prints only the path. "
+            "REFIT2026 trains on opened months and needs --exploratory-opened-windows."
+        ),
+    )
+    exp_run.add_argument("--preset", required=True, choices=["DEV2017", "REFIT2026"])
+    exp_run.add_argument("--data-root", required=True)
+    exp_run.add_argument("--lock", required=True)
+    exp_run.add_argument("--out", default="artifacts/experiments")
+    exp_run.add_argument("--train-sample-fraction", type=float)
+    exp_run.add_argument("--models", help="comma-separated subset of the preset's families")
+    exp_run.add_argument(
+        "--exploratory-opened-windows",
+        action="store_true",
+        help="allow reading 2020-01 or later; the run is labeled exploratory-opened-window",
+    )
+    exp_run.set_defaults(handler=_cmd_experiment_run)
+    exp_roll = experiment_sub.add_parser(
+        "rolling-origin",
+        help="ADR 0009 §4 development folds (outcomes through 2019-12 only)",
+        description=(
+            "Fits every development family per fold, evaluates each on its fold window with "
+            "regime calibration and cohort error attribution, and writes a summary report. "
+            "Prints only the report path."
+        ),
+    )
+    exp_roll.add_argument("--data-root", required=True)
+    exp_roll.add_argument("--lock", required=True)
+    exp_roll.add_argument("--out", default="artifacts/experiments")
+    exp_roll.add_argument("--train-sample-fraction", type=float)
+    exp_roll.add_argument("--origins", help="comma-separated YYYY-MM origins (default: ADR 0009)")
+    exp_roll.add_argument("--models", help="comma-separated subset of the development families")
+    exp_roll.set_defaults(handler=_cmd_experiment_rolling)
 
     fingerprint = sub.add_parser(
         "fingerprint", help="row count and order-independent content hash of every warehouse table"

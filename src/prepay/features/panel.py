@@ -49,16 +49,29 @@ def _categorical(column: pa.ChunkedArray) -> ObjectArray:
     return np.asarray(lookup[codes], dtype=object)
 
 
-def sample_clause(sample_fraction: float | None) -> str:
-    """Loan-consistent deterministic sample: keep a loan iff hash(loan_id) falls in the bucket."""
+def sample_clause(sample_fraction: float | None, sample_index: int = 0) -> str:
+    """Loan-consistent deterministic sample: keep a loan iff hash(loan_id) falls in the bucket.
+
+    Sample ``k`` keeps buckets ``[k * n, (k + 1) * n)`` with ``n = fraction * 10000``, so samples
+    with different indices are disjoint, and sample 0 is the primary run's sample (ADR 0009 §9).
+    ``hash`` is DuckDB's; manifests record the DuckDB version because the function isn't
+    documented as stable across versions.
+    """
     if sample_fraction is None:
+        if sample_index != 0:
+            raise ValueError("sample_index needs a sample_fraction")
         return "true"
     if not 0.0 < sample_fraction <= 1.0:
         raise ValueError("sample_fraction must lie in (0, 1]")
+    kept = round(sample_fraction * LOAN_HASH_BUCKETS)
+    if sample_index < 0 or (sample_index + 1) * kept > LOAN_HASH_BUCKETS:
+        raise ValueError(f"sample_index {sample_index} has no disjoint sample at this fraction")
     if sample_fraction == 1.0:
         return "true"
-    kept = round(sample_fraction * LOAN_HASH_BUCKETS)
-    return f"hash(loan_id) % {LOAN_HASH_BUCKETS} < {kept}"
+    if sample_index == 0:
+        return f"hash(loan_id) % {LOAN_HASH_BUCKETS} < {kept}"
+    low, high = sample_index * kept, (sample_index + 1) * kept
+    return f"hash(loan_id) % {LOAN_HASH_BUCKETS} between {low} and {high - 1}"
 
 
 def read_panel(
@@ -67,6 +80,7 @@ def read_panel(
     last_month: int,
     *,
     sample_fraction: float | None = None,
+    sample_index: int = 0,
 ) -> PanelBatch:
     """Rows with ``first_month <= target_month <= last_month`` (month indices, inclusive)."""
     columns = ", ".join(
@@ -74,7 +88,8 @@ def read_panel(
     )
     table = con.sql(
         f"select {columns} from fct_hazard_panel "  # noqa: S608 - fixed identifiers only
-        f"where target_month between $first and $last and {sample_clause(sample_fraction)} "
+        f"where target_month between $first and $last "
+        f"and {sample_clause(sample_fraction, sample_index)} "
         "order by loan_id, target_month",
         params={"first": first_month, "last": last_month},
     ).to_arrow_table()
@@ -143,3 +158,20 @@ def rate_path_from_bronze(bronze_root: Path) -> RatePath:
         ).fetchall()
         series[name] = ([r[0] for r in rows], [r[1] for r in rows])
     return RatePath.from_weekly(*series["MORTGAGE30US"], *series["MORTGAGE15US"])
+
+
+def rate_path_from_warehouse(con: duckdb.DuckDBPyConnection) -> RatePath:
+    """Month-end as-of rate path from ``int_monthly_rates`` (equal to the bronze path; tested)."""
+    rows = con.sql(
+        "select month, rate_30y, rate_15y, pmms_application_based from int_monthly_rates "
+        "order by month"
+    ).fetchall()
+    months = np.array([r[0] for r in rows], dtype=np.int64)
+    if months.size == 0 or np.any(np.diff(months) != 1):
+        raise ValueError("int_monthly_rates must cover consecutive months")
+    return RatePath(
+        int(months[0]),
+        np.array([np.nan if r[1] is None else r[1] for r in rows], dtype=np.float64),
+        np.array([np.nan if r[2] is None else r[2] for r in rows], dtype=np.float64),
+        np.array([bool(r[3]) for r in rows], dtype=bool),
+    )

@@ -28,6 +28,7 @@ import numpy as np
 from prepay import periods
 from prepay.arrays import FloatArray, IntArray
 from prepay.features.batch import PanelBatch
+from prepay.features.derived import augment
 from prepay.features.machine import LoanStatics, RatePath, compute_features
 from prepay.features.panel import load_statics
 
@@ -173,7 +174,7 @@ def model_hazards(
             features=compute_features(statics, rates, rows, target),
             loan_code=rows,
         )
-        p = np.asarray(model.predict_proba(batch))
+        p = np.asarray(model.predict_proba(augment(batch, rates)))
         out[start : start + part.shape[0]] = p.reshape(part.shape[0], horizon, 3)
     return out
 

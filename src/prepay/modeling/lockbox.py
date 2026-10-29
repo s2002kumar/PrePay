@@ -70,8 +70,44 @@ class Seal:
             raise SealError(f"artifacts of {self.run_dir.name} changed after sealing")
 
 
-def _read_only(path: Path) -> None:
+def read_only(path: Path) -> None:
+    """Mark a write-once report read-only (owner, group and others)."""
     os.chmod(path, stat.S_IREAD | stat.S_IRGRP | stat.S_IROTH)
+
+
+PRIMARY_KIND = "prepay-model-run"
+
+
+def _is_primary(manifest: dict[str, Any]) -> bool:
+    return bool(manifest.get("kind", PRIMARY_KIND) == PRIMARY_KIND)
+
+
+def _evaluation_plan(manifest: dict[str, Any]) -> dict[str, Any]:
+    if not _is_primary(manifest):
+        # Experiment runs are judged only on months nobody had seen (ADR 0009 §2, ADR 0010).
+        return {
+            "protocol": "ADR 0010 forward evaluation only (prepay forward evaluate)",
+            "models": manifest["models"],
+            "calibration": "each model with its own ADR 0004 §7 decision",
+        }
+    return {
+        "windows": list(TEST_WINDOWS),
+        "models": manifest["models"],
+        "metrics": [
+            "log_loss",
+            "brier",
+            "ece",
+            "auroc",
+            "average_precision",
+            "full_payoff_only_CPR_proxy bias/mae",
+            "loan-clustered intervals",
+            "cohort run-off at 6/12/24m vs Aalen-Johansen (hindsight and as-of rates)",
+            "ADR 0006 §7 segment tables (A/E with loan-cluster intervals, poorly served cells)",
+            "ADR 0006 §8 credit metrics only where credit is validated and events >= 100",
+            "ADR 0006 §9 balance run-off: pool factor, principal components, truncated WAL",
+            "ADR 0006 §10 informative-censoring bounds and censored-loan profiles",
+        ],
+    }
 
 
 def seal(run_dir: Path) -> Seal:
@@ -89,29 +125,12 @@ def seal(run_dir: Path) -> Seal:
         "candidate_digest": candidate_digest(run_dir),
         "data_lock_fingerprint": manifest["data_lock_fingerprint"],
         "primary_metric": manifest["primary_metric"],
-        "evaluation_plan": {
-            "windows": list(TEST_WINDOWS),
-            "models": manifest["models"],
-            "metrics": [
-                "log_loss",
-                "brier",
-                "ece",
-                "auroc",
-                "average_precision",
-                "full_payoff_only_CPR_proxy bias/mae",
-                "loan-clustered intervals",
-                "cohort run-off at 6/12/24m vs Aalen-Johansen (hindsight and as-of rates)",
-                "ADR 0006 §7 segment tables (A/E with loan-cluster intervals, poorly served cells)",
-                "ADR 0006 §8 credit metrics only where credit is validated and events >= 100",
-                "ADR 0006 §9 balance run-off: pool factor, principal components, truncated WAL",
-                "ADR 0006 §10 informative-censoring bounds and censored-loan profiles",
-            ],
-        },
-        "report_flags": REPORT_FLAGS,
+        "evaluation_plan": _evaluation_plan(manifest),
+        "report_flags": REPORT_FLAGS if _is_primary(manifest) else None,
         "allowed_exclusions": "quarantine and exclusion rules of ADR 0003, as implemented",
     }
     write_json_atomic(target, payload)
-    _read_only(target)
+    read_only(target)
     return Seal(run_dir, payload)
 
 
@@ -171,6 +190,11 @@ def _cohort_models(run: Run) -> dict[str, Predictor]:
 
 
 def evaluate_lockbox(run_dir: Path, data_root: Path, lock: DataLock) -> dict[str, Any]:
+    if not _is_primary(read_json(run_dir / MANIFEST)):
+        raise LockboxError(
+            f"{run_dir.name} is an experiment run; the opened test windows can't judge it. "
+            "Experiment runs are evaluated only on forward months (ADR 0010)."
+        )
     sealed = load_seal(run_dir)
     out = run_dir / FIRST_EVALUATION
     if out.exists():
@@ -238,7 +262,7 @@ def evaluate_lockbox(run_dir: Path, data_root: Path, lock: DataLock) -> dict[str
         "credit_sufficiency": credit,
     }
     write_json_atomic(out, report)
-    _read_only(out)
+    read_only(out)
     return report
 
 
