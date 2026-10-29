@@ -10,7 +10,11 @@ pools under interest-rate scenarios.
 > **Status (2026-10-29):** the full system is built and tested on **synthetic data** (M0–M5).
 > **Real-data study run privately, unpublished:** the Freddie Mac Release 48 sample was
 > ingested, audited, trained on and evaluated once on a sealed holdout (ADR 0006). Its results,
-> including failed checks, stay private until the dataset terms have been reviewed.
+> including failed checks, stay private until the dataset terms have been reviewed. The selected
+> model failed across rate regimes and is **not approved as a reliable forecaster**. A
+> [reliability program](docs/RELIABILITY_PLAN.md) now adds failure diagnostics, economically
+> constrained candidates, applicability warnings, and a one-shot test on months after 2026-06.
+> No improvement is claimed until that test runs.
 > **No hosted demo yet:** hosting needs the owner's approval. The demo runs locally or in
 > Docker. Nothing here claims real-world predictive accuracy. See [docs/STATUS.md](docs/STATUS.md).
 
@@ -37,7 +41,10 @@ Prepay makes that timing explicit, with every assumption labeled.
 | Sealed, one-shot holdout + censor-aware cohort backtest | implemented on synthetic data | [VALIDATION_REPORT](docs/VALIDATION_REPORT.md) |
 | Audited cash-flow engine (Decimal oracle, mutation tests) | implemented | [FINANCE_ENGINE](docs/validation/FINANCE_ENGINE.md) |
 | FastAPI + responsive web demo (fictional pools only) | implemented, runs locally and in Docker | [ADR 0005](docs/decisions/0005-public-demo-boundary.md) |
-| Real-data training and validation | **run privately, unpublished** pending terms review; not independently reviewed | [Runbook](docs/RESEARCH_RUNBOOK.md), [Status](docs/STATUS.md) |
+| Real-data training and validation | **run privately, unpublished** pending terms review; failed checks across rate regimes; not independently reviewed | [Runbook](docs/RESEARCH_RUNBOOK.md), [Status](docs/STATUS.md) |
+| Failure diagnostics (era encoding, economic probes, support maps, stability) and constrained candidates (X1–X3, H1) | built and tested on synthetic data, with known-answer tests; real runs are owner-run | [Plan](docs/RELIABILITY_PLAN.md), [ADR 0009](docs/decisions/0009-reliability-program-protocol.md) |
+| Forward evaluation on months nobody has seen | built; pre-registered; waits for a release with cutoff ≥ 2027-06 | [ADR 0010](docs/decisions/0010-forward-evaluation-preregistration.md) |
+| Applicability verdict, model-family range and credit-as-assumption in every projection | implemented in the demo API and UI | [R1 packet](docs/reviews/R1.md) |
 | Hosted public demo | **blocked**: needs hosting approval | [Deployment](docs/DEPLOYMENT.md) |
 
 ## How it works
@@ -114,11 +121,12 @@ fictional data), `make benchmark` (wall time / peak RSS per stage), `make public
 
 ## Evidence and engineering standards
 
-CI runs on every PR: lint, strict typing, 270+ Python tests, a finance coverage gate (≥90%), web
+CI runs on every PR: lint, strict typing, 360+ Python tests, a finance coverage gate (≥90%), web
 lint/typecheck/tests, Playwright E2E with axe (WCAG 2.1 AA) on every view in light and dark, and
 a publication gate over history and build outputs. CodeQL, Dependabot and secret scanning are on,
 and `main` requires all checks. Measured baseline: [BENCHMARKS](docs/BENCHMARKS.md). Reviewer
-packets: [M2](docs/reviews/M2.md), [M4](docs/reviews/M4.md), [M5](docs/reviews/M5.md). All
+packets: [M2](docs/reviews/M2.md), [M4](docs/reviews/M4.md), [M5](docs/reviews/M5.md),
+[R1 reliability](docs/reviews/R1.md). All
 reviews so far are self-review by the implementing agent; **no independent review has
 happened.**
 
@@ -126,7 +134,8 @@ happened.**
 
 Synthetic results show that the software works, not that it predicts real mortgages. It is not
 an MBS waterfall, a valuation or OAS tool, or lending/investment advice. It doesn't model
-curtailments, delinquency cash timing or servicing. Credit severity and recovery lag are
+curtailments ([feasibility study](docs/validation/CURTAILMENTS.md)), delinquency cash timing or
+servicing. Credit exits are a stated assumption unless the credit hazard is validated. Credit severity and recovery lag are
 illustrative inputs. See the [validation report](docs/VALIDATION_REPORT.md) §8.
 
 ## Data and license

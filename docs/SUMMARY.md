@@ -34,6 +34,20 @@ the rule wasn't tuned afterwards. In a world with 8× the data, the same rule pi
 model, which won. That model has the same functional form as the synthetic truth, so the win
 was expected and says nothing about real loans.
 
+**When the real model failed.** On real data, the selected LightGBM:
+- overpredicted payoffs after rates rose;
+- underpredicted the 2020–21 refinance wave.
+
+I didn't retune it on those months. Public rate history showed why that would be circular:
+every training month above 5.5% was before 2009, and the 2020 rates were below anything in
+training. So I built a reliability program instead:
+- probes that catch a model using rate level as an era proxy (shown on a planted confound);
+- constrained models that can't;
+- an applicability verdict and a model-family range on every projection;
+- a pre-registered one-shot test on months nobody has seen yet.
+
+No improvement is claimed until that test runs.
+
 **Engineering.** Python 3.12, uv, mypy --strict, ruff, sqlfluff, 270+ Python tests (Hypothesis
 properties, mutation kills), Vitest, Playwright + axe. CI runs synthetic-only with SHA-pinned
 actions and a read-only token. CodeQL, Dependabot and secret scanning are on; `main` is protected
