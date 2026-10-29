@@ -1,6 +1,8 @@
 # ADR 0008: Follow-up experiment on a rate-regime-robust payoff model, judged only on future months
 
-- Status: **proposed**. Running it needs later Freddie Mac releases and the owner's decision.
+- Status: **accepted for implementation** (owner's reliability program brief, 2026-10-29). The
+  evaluation itself still waits for later Freddie Mac releases. ADR 0010 adds candidates, criteria
+  and business tolerances; it doesn't change anything below.
 - Date: 2026-10-29, written after the single real-data lockbox opening (ADR 0006).
 - Scope: a separate research experiment. The sealed primary run, its report and its selection stay
   unchanged.
