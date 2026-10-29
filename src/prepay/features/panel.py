@@ -175,3 +175,31 @@ def rate_path_from_warehouse(con: duckdb.DuckDBPyConnection) -> RatePath:
         np.array([np.nan if r[2] is None else r[2] for r in rows], dtype=np.float64),
         np.array([bool(r[3]) for r in rows], dtype=bool),
     )
+
+
+#: Columns that carry outcomes or identify loans; :func:`read_features` never selects them.
+OUTCOME_COLUMNS = ("outcome", "outcome_class", "exit_removal_upb", "exposure_upb", "loan_id")
+
+
+def read_features(
+    con: duckdb.DuckDBPyConnection,
+    first_month: int,
+    last_month: int,
+    names: tuple[str, ...],
+    *,
+    sample_fraction: float | None = None,
+) -> dict[str, FloatArray]:
+    """Numeric feature columns only, for support and drift maps on any window.
+
+    No outcome, exposure or loan identifier is selected, so reading a window's covariates reveals
+    nothing about its outcomes (ADR 0006 §6 restricts outcomes only).
+    """
+    known = {f.name for f in FEATURES if f.kind == "numeric"}
+    if not set(names) <= known:
+        raise ValueError(f"not numeric feature columns: {sorted(set(names) - known)}")
+    table = con.sql(
+        f"select {', '.join(names)} from fct_hazard_panel "  # noqa: S608 - validated identifiers
+        f"where target_month between $first and $last and {sample_clause(sample_fraction)}",
+        params={"first": first_month, "last": last_month},
+    ).to_arrow_table()
+    return {name: _numeric(table[name]) for name in names}

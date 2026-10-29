@@ -57,7 +57,9 @@ real-data outputs aren't read by the agent (ADR 0009 §3).
 | Candidates X1–X3 (factored LightGBM, monotone payoff, no rate levels) and H1 (constrained hazard) | built (synthetic) | `prepay.modeling.challengers`; `tests/unit/test_challengers.py` (coherence, monotone constraints, level invariance, H1 tail, round trip) |
 | Derived behavioral features (new opportunity, new low, payment saving) | built (synthetic) | `prepay.features.derived`; `tests/unit/test_derived.py`; history-vs-scenario parity in `tests/integration/test_feature_parity.py` |
 | Experiment runs (DEV2017, REFIT2026) and rolling-origin folds V1 with regime calibration (D4) and error attribution (D5) | built (synthetic); real runs owner-run (RESEARCH_RUNBOOK §8) | `prepay experiment run`, `prepay experiment rolling-origin`; `tests/integration/test_experiments.py` (opened-window guard, development-month spy, lockbox refusal, disjoint samples) |
-| Diagnostics D1–D3, D6–D8, forward mechanism P1, safeguards R1–R3, finance F1–F3 | not built | — |
+| Diagnostics D1 (era encoding), D2 (coherent economic probes incl. rate level at fixed incentive), D3 (support maps, feature-only), D6/D7 (sample and seed stability) | built (synthetic); real runs owner-run (RESEARCH_RUNBOOK §8) | `prepay diagnose probes`, `prepay diagnose stability`; `tests/unit/test_probes.py` (known-answer: the level probe flags a confounded LightGBM, not X1/H1; the tail probe flags flat trees), `tests/integration/test_reliability_diagnostics.py` (outcome-read spy ≤ 2019-12, feature-only reader) |
+| Applicability monitor R1 (support profile, PSI, verdict) | built (synthetic); not yet wired into projections | `prepay.reliability.support`; `tests/unit/test_support.py`; ADR 0009 amendment 1 |
+| D8 post-mortem, forward mechanism P1, safeguards R2–R3, finance F1–F3 | not built | — |
 
 ## Acceptance gates (SPEC §4)
 
