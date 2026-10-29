@@ -62,7 +62,8 @@ real-data outputs aren't read by the agent (ADR 0009 §3).
 | Forward mechanism P1 (ADR 0008/0010): write-once registration, one evaluation per later lock, Holm families, tolerances T1–T6 | built (synthetic); registration and evaluation owner-run; first opening needs a release with cutoff ≥ 2027-06 | `prepay forward register`, `prepay forward evaluate`; `tests/integration/test_forward.py` (reader spy: no month ≤ seen-through read; tamper, second-evaluation and interim-look refusals; Release-47 → Release-48 synthetic opening) |
 | Safeguards R2 (model-family range, labeled "not a confidence interval") and R3 (verdict and range in the API and Scenario Lab; range-first headline when unsupported; the model is always named) | built (synthetic demo) | `prepay.api.service`; `tests/integration/test_api_reliability.py` (verdict per scenario, out-of-support rates flagged, range brackets the selected model) |
 | F2 credit exits as an explicit assumption (training-period CDR unless validated, or user-set CDR) | built (synthetic demo) | `prepay.reliability.credit`; `tests/unit/test_credit_assumption.py` (Hypothesis: coherent, conditional payoff preserved); API `credit.annual_cdr_pct` |
-| D8 post-mortem, finance F1 (curtailments) and F3 (component report) | not built | — |
+| F1 curtailment feasibility: DDLPI-aware estimator under both servicing conventions, rounding and transition exclusions, pre-declared decision rule | synthetic rule **passes**; real-data rule not run (owner-run); engine still models no curtailments | `prepay.evaluation.curtailment`, `prepay diagnose curtailments`; `tests/unit/test_curtailment.py`, `tests/integration/test_curtailment_study.py`; [CURTAILMENTS.md](validation/CURTAILMENTS.md) |
+| D8 post-mortem on opened windows, F3 cash-flow component report | not built (D8 needs owner-run real data; F3's components are already separate ledger lines) | — |
 
 ## Acceptance gates (SPEC §4)
 
