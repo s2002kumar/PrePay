@@ -3,10 +3,15 @@
 Structure follows MODELING §10. OSFI E-23 and US SR 26-2 were used as design inspiration only;
 this is not a compliance attestation. **No independent validation has taken place.**
 
-> **Status: real-data validation is BLOCKED.** No Freddie Mac SFLLD files exist on the build
-> machine (owner registration pending). Every number below comes from the *fictional* `ci`
-> synthetic dataset. Those numbers show the pipeline, controls and reporting working end to
-> end. They say **nothing** about predictive accuracy on real mortgages.
+> **Status: the real-data study was run privately and is unpublished.** The owner supplied the
+> Freddie Mac SFLLD Release 48 Standard sample on 2026-10-28. It was ingested, audited, trained
+> on, sealed and evaluated once under ADR 0006, on the owner's machine. Its results, including
+> pre-registered checks that failed, are in a private review packet until the owner completes a
+> review of the dataset terms (ADR 0006 §3).
+>
+> Every number below comes from the *fictional* `ci` synthetic dataset. Those numbers show the
+> pipeline, controls and reporting working end to end. They say **nothing** about predictive
+> accuracy on real mortgages.
 
 ## 1. Intended use
 
@@ -21,7 +26,7 @@ trading or mapping to Freddie Mac securities (dataset terms).
 | Item | Real data | Synthetic study |
 |---|---|---|
 | Source | SFLLD Standard sample, Release 47/48 layout (ADR 0002) | `prepay synth --preset ci` (seed 20261028) |
-| Coverage | BLOCKED | 5,875 loans, vintages 2003–2026, cutoff 2026-06 |
+| Coverage | Release 48 sample, vintages 1999–2026, cutoff 2026-06; counts private | 5,875 loans, vintages 2003–2026, cutoff 2026-06 |
 | Provenance | data lock + bronze lineage (`_source_file`, `_source_row`) | same code path |
 | Quality | `agg_data_quality` counts | 187 quarantined loans = exactly the injected anomalies |
 
@@ -144,13 +149,17 @@ calibrated losses.
 
 ## 7. Software tests and controls
 
-235 automated tests: Decimal oracle, Hypothesis properties, mutation kills, independent label
+296 automated tests (2026-10-29): Decimal oracle, Hypothesis properties, mutation kills, independent label
 oracle, feature parity, truth recovery, holdout spy, seal tamper detection, and one-shot lockbox
 refusal. CI runs synthetic-only with SHA-pinned actions.
 
 ## 8. Limitations and open items
 
-- Real-data validation, real segment reports and PSI drift monitoring are **not done**.
+- The real-data study (training, one sealed opening, segments, credit sufficiency, cohort
+  run-off, censoring bounds) was run privately. It is unpublished and has not been independently
+  reviewed. PSI drift monitoring is **not built**.
+- The real test windows (2020-01 to 2026-06) have now been opened once. Any revised model can be
+  judged fairly only on reporting months after 2026-06, from a later release (ADR 0007, ADR 0008).
 - Seed-repeat stability and feature ablations are not built.
 - The parsimony rule is underpowered on small validation windows (ADR 0004).
 - Curtailments aren't modeled; CPR figures are full-payoff-only proxies.

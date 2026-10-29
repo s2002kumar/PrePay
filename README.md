@@ -7,9 +7,10 @@ pools under interest-rate scenarios.
 
 [![ci](https://github.com/s2002kumar/PrePay/actions/workflows/ci.yml/badge.svg)](https://github.com/s2002kumar/PrePay/actions/workflows/ci.yml)
 
-> **Status (2026-10-28):** the full system is built and tested on **synthetic data** (M0–M5).
-> **Real-data study in progress, privately:** Freddie Mac sample files were obtained on
-> 2026-10-28. No real-data result is published here until the dataset terms have been reviewed.
+> **Status (2026-10-29):** the full system is built and tested on **synthetic data** (M0–M5).
+> **Real-data study run privately, unpublished:** the Freddie Mac Release 48 sample was
+> ingested, audited, trained on and evaluated once on a sealed holdout (ADR 0006). Its results,
+> including failed checks, stay private until the dataset terms have been reviewed.
 > **No hosted demo yet:** hosting needs the owner's approval. The demo runs locally or in
 > Docker. Nothing here claims real-world predictive accuracy. See [docs/STATUS.md](docs/STATUS.md).
 
@@ -36,7 +37,7 @@ Prepay makes that timing explicit, with every assumption labeled.
 | Sealed, one-shot holdout + censor-aware cohort backtest | implemented on synthetic data | [VALIDATION_REPORT](docs/VALIDATION_REPORT.md) |
 | Audited cash-flow engine (Decimal oracle, mutation tests) | implemented | [FINANCE_ENGINE](docs/validation/FINANCE_ENGINE.md) |
 | FastAPI + responsive web demo (fictional pools only) | implemented, runs locally and in Docker | [ADR 0005](docs/decisions/0005-public-demo-boundary.md) |
-| Real-data training and validation | **in progress, private**: results unpublished pending terms review | [Runbook](docs/RESEARCH_RUNBOOK.md) |
+| Real-data training and validation | **run privately, unpublished** pending terms review; not independently reviewed | [Runbook](docs/RESEARCH_RUNBOOK.md), [Status](docs/STATUS.md) |
 | Hosted public demo | **blocked**: needs hosting approval | [Deployment](docs/DEPLOYMENT.md) |
 
 ## How it works
