@@ -63,6 +63,7 @@ def read_window(
     w: Window,
     *,
     sample_fraction: float | None = None,
+    sample_index: int = 0,
     seal: Seal | None = None,
 ) -> PanelBatch:
     """Read a window's panel rows; test windows require a verified seal."""
@@ -72,4 +73,6 @@ def read_window(
                 f"{w.name} is a sealed holdout; only `prepay evaluate-lockbox` may read it"
             )
         seal.verify()
-    return read_panel(con, w.first, w.last, sample_fraction=sample_fraction)
+    return read_panel(
+        con, w.first, w.last, sample_fraction=sample_fraction, sample_index=sample_index
+    )

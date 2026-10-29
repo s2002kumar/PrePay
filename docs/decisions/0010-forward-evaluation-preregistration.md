@@ -124,6 +124,22 @@ them. This ADR fixes, in advance:
    registered separately, with its seen-through month set to the latest cutoff known on its
    registration day.
 
+## Amendment 1 (2026-10-29, before any member run was trained)
+
+These are definition details found while implementing `prepay.modeling.challengers`.
+
+- **The PMMS method flag is excluded too.** Every program candidate (X1–X3, H1 and their refits)
+  leaves out `pmms_application_based` as well as the two rate levels.
+  - In DEV2017 the flag is constant at 0, and LightGBM can't split on a constant. So X1 and X2 are
+    exactly as ADR 0008 defines them.
+  - In REFIT2026 the flag would mark every month after 2022-11 and act as an era dummy, which the
+    program removes on purpose.
+  - R-M1 keeps the flag, because it is the primary method refit unchanged.
+- **H1 also leaves out nominal loan size and remaining payments.** Loan size drifts with era
+  (RELIABILITY_PLAN A2). Remaining payments add nothing beyond age for the terms in scope.
+- **The DEV2017 designated model is X2.** Experiment runs never select; the seal needs one
+  designated model, and it has no other role.
+
 ## Consequences
 
 The first confirmatory evidence arrives around Release 52, in late 2027. Until then the product

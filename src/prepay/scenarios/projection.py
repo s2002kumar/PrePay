@@ -16,6 +16,7 @@ import numpy as np
 from prepay import periods
 from prepay.arrays import FloatArray
 from prepay.features.batch import PanelBatch
+from prepay.features.derived import augment
 from prepay.features.machine import RatePath, compute_features
 from prepay.finance import (
     CreditAssumptions,
@@ -127,12 +128,15 @@ def project_pool(
     loan_index = np.repeat(np.arange(n), months)
     target = np.tile(np.arange(t0 + 1, t0 + months + 1), n)
     features = compute_features(pool.statics, path, loan_index, target)
-    batch = PanelBatch(
-        loan_id=loan_index.astype(object),
-        target_month=target,
-        outcome_class=np.zeros(target.size, dtype=np.int64),
-        exposure_upb=np.zeros(target.size),
-        features=features,
+    batch = augment(
+        PanelBatch(
+            loan_id=loan_index.astype(object),
+            target_month=target,
+            outcome_class=np.zeros(target.size, dtype=np.int64),
+            exposure_upb=np.zeros(target.size),
+            features=features,
+        ),
+        path,
     )
     p = np.asarray(model.predict_proba(batch)).reshape(n, months, 3)
     hazards = HazardPaths(prepay=p[:, :, 1], credit=p[:, :, 2], active=p[:, :, 0])

@@ -151,3 +151,27 @@ tables, credit gating, balance run-off and informative-censoring bounds. Report 
 including any baseline win or degradation flag. Don't publish real-data results without the
 terms review described at the top of this runbook. After the opening, the test windows can't
 judge a revised model fairly; ADR 0008 describes the forward-month experiment instead.
+
+## 8. Reliability program experiments (private, owner-run)
+
+The program (`docs/RELIABILITY_PLAN.md`, ADR 0009/0010) runs only on your machine. Every command
+prints just an output path and a status. Reports stay under the gitignored `artifacts/`. Don't
+paste them into hosted AI sessions until the data-use review is complete (ADR 0009 §3). Use the
+primary run's training fraction (0.1 at full sample scale).
+
+```bash
+# Development folds (ADR 0009 §4): outcomes through 2019-12 only. Every development family is
+# fitted per fold; expect several hours on a laptop.
+uv run prepay experiment rolling-origin --data-root <data-root> --lock configs/data.lock.json   --out artifacts/experiments --train-sample-fraction 0.1
+
+# Forward-evaluation members (ADR 0010). Seal each run right after training.
+uv run prepay experiment run --preset DEV2017 --data-root <data-root>   --lock configs/data.lock.json --out artifacts/experiments --train-sample-fraction 0.1
+uv run prepay experiment run --preset REFIT2026 --data-root <data-root>   --lock configs/data.lock.json --out artifacts/experiments --train-sample-fraction 0.1   --exploratory-opened-windows        # trains on opened months; use 0.05 if 0.1 exceeds 10 GB
+uv run prepay seal --run artifacts/experiments/<run_id>
+```
+
+- `rolling-origin` writes `artifacts/experiments/rolling-origin-<UTC>.json`: per fold and model,
+  log loss, paired differences vs B2 and M1, A/E, regime calibration (D4) and cohort error
+  attribution (D5), plus fold wins and ranks. It is development evidence (ADR 0009 §2). It ranks
+  and explains candidates; it never confirms one.
+- Member runs refuse the lockbox. They are judged only on forward months (ADR 0010).

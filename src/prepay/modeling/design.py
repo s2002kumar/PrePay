@@ -82,7 +82,7 @@ class Preprocessor:
         basis = BSpline.design_matrix(x, knots, SPLINE_DEGREE).toarray()
         return np.asarray(basis, dtype=np.float64)
 
-    def _one_hot(self, batch: PanelBatch, name: str) -> FloatArray:
+    def one_hot(self, batch: PanelBatch, name: str) -> FloatArray:
         text = np.asarray(_as_text(batch.features[name]), dtype=object)
         known = self.levels[name]
         columns = [text == level for level in known]
@@ -100,7 +100,7 @@ class Preprocessor:
                 ]
             )
         ]
-        blocks += [self._one_hot(batch, n) for n in self.categorical]
+        blocks += [self.one_hot(batch, n) for n in self.categorical]
         blocks += [self._spline_basis(batch, n) for n in SPLINE_FEATURES]
         return np.hstack(blocks)
 

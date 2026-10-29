@@ -54,7 +54,10 @@ real-data outputs aren't read by the agent (ADR 0009 §3).
 |---|---|---|
 | Plan, ranked hypotheses, protocol (ADR 0009), forward pre-registration (ADR 0010) | accepted 2026-10-29 | `docs/RELIABILITY_PLAN.md`, `docs/decisions/0009-*`, `docs/decisions/0010-*` |
 | Public rate-regime facts (§3.1) | built | `prepay diagnose rate-regimes`, `tests/unit/test_regimes.py`; run on FRED PMMS retrieved 2026-10-29 |
-| Diagnostics D1–D8, candidates X1–X3 and H1, rolling origin V1, forward mechanism P1, safeguards R1–R3, finance F1–F3 | not built | — |
+| Candidates X1–X3 (factored LightGBM, monotone payoff, no rate levels) and H1 (constrained hazard) | built (synthetic) | `prepay.modeling.challengers`; `tests/unit/test_challengers.py` (coherence, monotone constraints, level invariance, H1 tail, round trip) |
+| Derived behavioral features (new opportunity, new low, payment saving) | built (synthetic) | `prepay.features.derived`; `tests/unit/test_derived.py`; history-vs-scenario parity in `tests/integration/test_feature_parity.py` |
+| Experiment runs (DEV2017, REFIT2026) and rolling-origin folds V1 with regime calibration (D4) and error attribution (D5) | built (synthetic); real runs owner-run (RESEARCH_RUNBOOK §8) | `prepay experiment run`, `prepay experiment rolling-origin`; `tests/integration/test_experiments.py` (opened-window guard, development-month spy, lockbox refusal, disjoint samples) |
+| Diagnostics D1–D3, D6–D8, forward mechanism P1, safeguards R1–R3, finance F1–F3 | not built | — |
 
 ## Acceptance gates (SPEC §4)
 

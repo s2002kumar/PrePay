@@ -124,3 +124,40 @@ def test_sampling_is_loan_consistent(built: tuple[Path, DataLock]) -> None:
     assert list(half.loan_id) == list(again.loan_id)
     with pytest.raises(ValueError, match="sample_fraction"):
         sample_clause(1.5)
+
+
+def test_derived_features_agree_between_history_and_state_machine(
+    gold: tuple[Path, PanelBatch],
+) -> None:
+    """Derived columns from gold rows + warehouse rates equal those from the state machine."""
+    from prepay.features.derived import DERIVED_NUMERIC, augment
+    from prepay.features.panel import rate_path_from_warehouse
+
+    root, batch = gold
+    with duckdb.connect(str(warehouse_path(root)), read_only=True) as con:
+        loan_ids, statics = load_statics(con)
+        warehouse = rate_path_from_warehouse(con)
+    bronze = rate_path_from_bronze(root / "bronze")
+    assert warehouse.first_month == bronze.first_month
+    np.testing.assert_allclose(warehouse.rate_30y, bronze.rate_30y, equal_nan=True)
+    np.testing.assert_allclose(warehouse.rate_15y, bronze.rate_15y, equal_nan=True)
+    position = {lid: i for i, lid in enumerate(loan_ids)}
+    loan_index = np.array([position[lid] for lid in batch.loan_id])
+    machine = PanelBatch(
+        loan_id=batch.loan_id,
+        target_month=batch.target_month,
+        outcome_class=batch.outcome_class,
+        exposure_upb=batch.exposure_upb,
+        features=compute_features(statics, bronze, loan_index, batch.target_month),
+    )
+    history, scenario = augment(batch, warehouse), augment(machine, bronze)
+    for name in DERIVED_NUMERIC:
+        np.testing.assert_allclose(
+            history.features[name],
+            scenario.features[name],
+            rtol=1e-12,
+            atol=1e-9,
+            equal_nan=True,
+            err_msg=name,
+        )
+    assert np.nanmax(history.features["new_opportunity_bps"]) > 0  # opportunities occur

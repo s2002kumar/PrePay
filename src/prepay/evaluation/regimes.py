@@ -14,13 +14,14 @@ moved outside the training window's range. It reads no loan data and is safe to 
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import numpy as np
 
 from prepay import periods
 from prepay.arrays import BoolArray, FloatArray, IntArray
+from prepay.evaluation.segments import Dimension
 from prepay.features.batch import PanelBatch
 from prepay.features.machine import TERM_15Y_MAX, ObjectArray, RatePath
 from prepay.modeling.windows import Window
@@ -94,6 +95,22 @@ def row_regimes(batch: PanelBatch, rates: RatePath) -> dict[str, ObjectArray]:
         ),
         "new_low": np.asarray(np.where(low, "new_low", "not_new_low"), dtype=object),
     }
+
+
+def regime_dimensions(rates: RatePath) -> tuple[Dimension, ...]:
+    """The ADR 0009 §5 regimes as segment dimensions (D4 calibration-by-regime tables)."""
+
+    def assign(key: str) -> Callable[[PanelBatch], ObjectArray]:
+        def labels(batch: PanelBatch) -> ObjectArray:
+            return row_regimes(batch, rates)[key]
+
+        return labels
+
+    return (
+        Dimension("rate_level_band", LEVEL_LABELS, assign("level_band")),
+        Dimension("rate_change_6m", CHANGE_LABELS, assign("rate_change_6m")),
+        Dimension("new_low", ("new_low", "not_new_low"), assign("new_low")),
+    )
 
 
 def _short_term(term_months: int) -> bool:

@@ -35,6 +35,23 @@ def git_sha() -> str | None:
     return out.stdout.strip()
 
 
+def git_dirty() -> bool | None:
+    """True if tracked files differ from HEAD (the recorded SHA doesn't describe the code)."""
+    git = shutil.which("git")
+    if git is None:
+        return None
+    try:
+        out = subprocess.run(  # noqa: S603 - resolved git binary, fixed arguments
+            [git, "-C", str(REPO_ROOT), "status", "--porcelain", "--untracked-files=no"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return bool(out.stdout.strip())
+
+
 def software_lock_digest() -> str | None:
     lock = REPO_ROOT / "uv.lock"
     return hashlib.sha256(lock.read_bytes()).hexdigest() if lock.is_file() else None
