@@ -70,6 +70,7 @@ def demo_bundle(
     from prepay.api.bundle import assemble_bundle
     from prepay.modeling.lockbox import evaluate_lockbox, seal
     from prepay.modeling.train import TrainingConfig, train
+    from prepay.reliability.support import profile_for_run
 
     root, lock = built
     config = TrainingConfig(logistic_c_grid=(0.1,), gbm_num_leaves_grid=(7,), gbm_max_rounds=80)
@@ -79,5 +80,9 @@ def demo_bundle(
     seal(run_dir)
     evaluate_lockbox(run_dir, root, lock)
     return assemble_bundle(
-        tmp_path_factory.mktemp("bundle") / "demo", run_dir, root / "bronze", preset="tiny"
+        tmp_path_factory.mktemp("bundle") / "demo",
+        run_dir,
+        root / "bronze",
+        preset="tiny",
+        support_profile=profile_for_run(root, run_dir),
     )

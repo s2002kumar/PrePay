@@ -6,7 +6,7 @@ import { LineChart, type Series } from "../components/LineChart";
 import { StackedColumns } from "../components/StackedColumns";
 import { pct, ratePct, signed, signedUsd, usd, years } from "../format";
 import { replaceParams, scenarioFromCode, scenarioLabel } from "../routing";
-import type { MonthlyRow, PoolSummary, ProjectionResponse, ScenarioOut } from "../types";
+import type { MonthlyRow, PoolSummary, ProjectionResponse, RangeValue, ScenarioOut } from "../types";
 
 const PRESETS = ["flat", "p-200", "p-100", "p100", "p200"];
 const HORIZONS = [12, 24, 60, 120, 240, 360];
@@ -95,6 +95,53 @@ function annual(rows: MonthlyRow[]): { labels: string[]; values: number[][] } {
   return { labels: [...byYear.keys()], values: [...byYear.values()] };
 }
 
+function rangeText(range: RangeValue | undefined, format: (v: number) => string): string {
+  if (!range || range.min === null || range.max === null) return "n/a";
+  return range.min === range.max ? format(range.min) : `${format(range.min)} – ${format(range.max)}`;
+}
+
+/** ADR 0009 §7 verdict per scenario and the spread across fitted model families (R1–R3). */
+function ReliabilityPanel({ scenarios }: { scenarios: ScenarioOut[] }) {
+  const rows = scenarios.filter((s) => s.reliability !== null);
+  if (rows.length === 0) return null;
+  const rangeFirst = rows.some((s) => s.reliability?.headline === "range");
+  return (
+    <section className="card" aria-labelledby="reliability-title" style={{ marginBottom: 16 }}>
+      <header>
+        <div>
+          <h2 id="reliability-title">Reliability</h2>
+          <p className="sub">
+            Whether each projection stays inside the model's training data, and the spread of results across the
+            fitted model families. The spread shows model disagreement, not a confidence interval.
+          </p>
+        </div>
+      </header>
+      {rangeFirst && (
+        <p className="warning" role="note">
+          At least one scenario is outside the model's training support: read the range, not the point values.
+        </p>
+      )}
+      <DataTable
+        caption="Applicability and model-family range"
+        rows={rows}
+        rowKey={(s) => s.label}
+        columns={[
+          { header: "Scenario", cell: (s) => s.label, text: true },
+          {
+            header: "Applicability",
+            cell: (s) => <span className={`badge verdict-${s.reliability?.verdict}`}>{s.reliability?.verdict}</span>,
+            text: true,
+          },
+          { header: "Balance outside training range", cell: (s) => pct(s.reliability?.outside_share) },
+          { header: "Thinly supported", cell: (s) => pct(s.reliability?.sparse_share) },
+          { header: "Returned in 24 months", cell: (s) => rangeText(s.model_range?.principal_returned_fraction_24m, (v) => pct(v)) },
+          { header: "Cash WAL", cell: (s) => rangeText(s.model_range?.cash_wal_years, years) },
+        ]}
+      />
+    </section>
+  );
+}
+
 export function ScenarioLab({ pools, asOfRate, params }: Props) {
   const [poolId, setPoolId] = useState(params.get("pool") ?? "fictional-2023-high-coupon");
   const [codeA, setCodeA] = useState(params.get("a") ?? "flat");
@@ -102,6 +149,7 @@ export function ScenarioLab({ pools, asOfRate, params }: Props) {
   const [horizon, setHorizon] = useState(Number(params.get("h") ?? 120));
   const [severity, setSeverity] = useState(Number(params.get("sev") ?? 0.35));
   const [lag, setLag] = useState(Number(params.get("lag") ?? 12));
+  const [cdr, setCdr] = useState(params.get("cdr") ?? "");
   const [result, setResult] = useState<ProjectionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -114,13 +162,14 @@ export function ScenarioLab({ pools, asOfRate, params }: Props) {
     scenario: scenarioFromCode(codeA, asOfRate) ?? { kind: "flat" as const },
     compare_to: scenarioFromCode(codeB, asOfRate),
     horizon_months: horizon,
-    credit: { severity, recovery_lag_months: lag },
-  }), [poolId, codeA, codeB, horizon, severity, lag, asOfRate]);
+    credit: { severity, recovery_lag_months: lag, annual_cdr_pct: cdr === "" ? null : Number(cdr) },
+  }), [poolId, codeA, codeB, horizon, severity, lag, cdr, asOfRate]);
 
   useEffect(() => {
     const next = new URLSearchParams({
       pool: poolId, a: codeA, b: codeB, h: String(horizon), sev: String(severity), lag: String(lag),
     });
+    if (cdr !== "") next.set("cdr", cdr);
     replaceParams(next);
     const timer = window.setTimeout(() => {
       pending.current?.abort();
@@ -141,7 +190,7 @@ export function ScenarioLab({ pools, asOfRate, params }: Props) {
         });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [request, poolId, codeA, codeB, horizon, severity, lag]);
+  }, [request, poolId, codeA, codeB, horizon, severity, lag, cdr]);
 
   const pool = pools.find((p) => p.pool_id === poolId);
   const a = result?.a;
@@ -226,6 +275,7 @@ export function ScenarioLab({ pools, asOfRate, params }: Props) {
 
       {a && (
         <div className={loading ? "is-loading" : undefined} aria-busy={loading}>
+          <ReliabilityPanel scenarios={b ? [a, b] : [a]} />
           <div className="tiles">
             <StatTile
               label="Cash weighted-average life"
@@ -363,6 +413,11 @@ export function ScenarioLab({ pools, asOfRate, params }: Props) {
                 <label htmlFor="severity">Credit severity (share of disposed principal lost)</label>
                 <input id="severity" type="number" min={0} max={1} step={0.05} value={severity}
                   onChange={(e) => setSeverity(Math.min(1, Math.max(0, Number(e.target.value))))} />
+              </div>
+              <div className="field">
+                <label htmlFor="cdr">Credit exits, annual CDR % (blank: default)</label>
+                <input id="cdr" type="number" min={0} max={20} step={0.1} value={cdr} placeholder="default"
+                  onChange={(e) => setCdr(e.target.value === "" ? "" : String(Math.min(20, Math.max(0, Number(e.target.value)))))} />
               </div>
               <div className="field">
                 <label htmlFor="lag">Recovery lag (months)</label>

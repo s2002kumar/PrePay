@@ -154,12 +154,6 @@ def investigate(
 
 
 # --------------------------------------------------------------------------- reliability program
-def _run_sample(manifest: dict[str, Any]) -> tuple[float | None, int]:
-    if "training_sample" in manifest:  # experiment run
-        return manifest["training_sample"]["fraction"], int(manifest["training_sample"]["index"])
-    return manifest["training_config"]["train_sample_fraction"], 0
-
-
 def diagnose_run(
     run_dir: Path,
     data_root: Path,
@@ -181,7 +175,7 @@ def diagnose_run(
     from prepay.features.panel import rate_path_from_warehouse, read_features
     from prepay.modeling.experiment import evidence_class
     from prepay.modeling.probes import era_encoding, probe_models
-    from prepay.modeling.registry import load_run
+    from prepay.modeling.registry import load_run, training_sample
     from prepay.modeling.windows import Window, read_window, standard_windows
     from prepay.reliability.support import MONITORED, SupportProfile
     from prepay.transform import warehouse_path
@@ -197,7 +191,7 @@ def diagnose_run(
         periods.parse_iso(reference_json["last"]),
     )
     evidence = evidence_class(lock, reference_window.last, allow_opened=allow_opened)
-    fraction, index = _run_sample(manifest)
+    fraction, index = training_sample(manifest)
     train_window = Window(
         "train", "train", 0, periods.parse_iso(manifest["windows"]["train"]["last"])
     )

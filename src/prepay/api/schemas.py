@@ -51,6 +51,14 @@ class CreditIn(Strict):
 
     severity: float = Field(0.35, ge=0.0, le=1.0, description="share of disposed principal lost")
     recovery_lag_months: int = Field(12, ge=0, le=36)
+    annual_cdr_pct: float | None = Field(
+        None,
+        ge=0.0,
+        le=20.0,
+        description="constant annual credit-disposition rate in percent. It replaces the "
+        "model's credit hazard as an explicit assumption; by default the model's hazard is "
+        "used only if it passed the credit-sufficiency rule",
+    )
 
 
 class ProjectionRequest(Strict):
@@ -95,12 +103,43 @@ class Summary(Strict):
     max_out_of_support_share_horizon: float
 
 
+class ReliabilityOut(Strict):
+    """ADR 0009 §7 applicability verdict over the horizon, weighted by projected balance."""
+
+    verdict: Literal["supported", "extrapolating", "unsupported"]
+    outside_share: float = Field(description="balance share with a feature outside training")
+    sparse_share: float = Field(description="balance share in thinly supported joint cells")
+    outside_share_by_feature: dict[str, float]
+    reasons: list[str]
+    headline: Literal["point", "range"] = Field(
+        description="'range' when the point projection should not be read on its own"
+    )
+
+
+class RangeValue(Strict):
+    min: float | None
+    max: float | None
+
+
+class ModelRange(Strict):
+    """Spread of key results across fitted model families: not a confidence interval."""
+
+    models: list[str]
+    principal_returned_fraction_12m: RangeValue
+    principal_returned_fraction_24m: RangeValue
+    cash_wal_years: RangeValue
+    ending_upb_horizon_usd: RangeValue
+    note: str
+
+
 class ScenarioOut(Strict):
     kind: str
     shock_bps: float
     label: str
     summary: Summary
     monthly: list[MonthlyRow]
+    reliability: ReliabilityOut | None = None
+    model_range: ModelRange | None = None
 
 
 class Deltas(Strict):

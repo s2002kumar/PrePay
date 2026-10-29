@@ -14,7 +14,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from prepay import periods
-from prepay.arrays import FloatArray
+from prepay.arrays import BoolArray, FloatArray, IntArray
 from prepay.features.batch import PanelBatch
 from prepay.features.derived import augment
 from prepay.features.machine import RatePath, compute_features
@@ -31,6 +31,7 @@ from prepay.finance import (
     horizon_summary,
     project,
 )
+from prepay.reliability.support import OUTSIDE, SPARSE, SupportProfile, decide
 from prepay.scenarios.pools import Pool
 from prepay.scenarios.rates import RateScenario, scenario_path
 
@@ -49,6 +50,46 @@ class ScenarioResult:
     rate_path_30y: FloatArray  # month-end scenario rates for t0+1..t0+months (percent)
     ledger: PoolLedger  # full life
     out_of_support_share: FloatArray  # balance-weighted share of rows outside training support
+    line_balance: FloatArray | None = None  # (lines, months) beginning UPB, for R1 weights
+    support_status: IntArray | None = None  # (lines, months) R1 status: 0 / SPARSE / OUTSIDE
+    outside_by_feature: dict[str, BoolArray] | None = None  # (lines, months) per feature
+
+    def reliability(self, horizon: int) -> dict[str, Any] | None:
+        """ADR 0009 §7 verdict over the horizon, weighted by projected balance (pool rows only).
+
+        A pool is judged on row support, not PSI (ADR 0009 amendment 1). ``None`` when the
+        model came without a support profile.
+        """
+        if self.support_status is None or self.line_balance is None:
+            return None
+        months = min(horizon, self.ledger.months)
+        weight = self.line_balance[:, :months]
+        status = self.support_status[:, :months]
+        total = float(weight.sum())
+        if total <= 0:
+            return None
+        outside = float(weight[status == OUTSIDE].sum() / total)
+        sparse = float(weight[status == SPARSE].sum() / total)
+        by_feature = {
+            name: float(weight[flags[:, :months]].sum() / total)
+            for name, flags in (self.outside_by_feature or {}).items()
+        }
+        verdict = decide(outside, sparse)
+        reasons = [
+            f"{name}: {share:.0%} of projected balance outside the training range"
+            for name, share in by_feature.items()
+            if share > 0
+        ]
+        if sparse > 0:
+            reasons.append(f"{sparse:.0%} of projected balance in thinly supported cells")
+        return {
+            "verdict": verdict,
+            "outside_share": outside,
+            "sparse_share": sparse,
+            "outside_share_by_feature": by_feature,
+            "reasons": reasons,
+            "headline": "range" if verdict == "unsupported" else "point",
+        }
 
     def summary(self, horizon: int) -> dict[str, Any]:
         months = min(horizon, self.ledger.months)
@@ -117,6 +158,7 @@ def project_pool(
     scenario: RateScenario,
     credit: CreditAssumptions,
     support: dict[str, dict[str, float]] | None = None,
+    profile: SupportProfile | None = None,
 ) -> ScenarioResult:
     t0 = pool.as_of_month
     remaining = pool.remaining_payments
@@ -157,8 +199,22 @@ def project_pool(
     total = balance.sum(axis=0)
     share = np.divide((balance * outside).sum(axis=0), total, out=np.zeros(months), where=total > 0)
     start = t0 + 1 - path.first_month
+    status = by_feature = None
+    if profile is not None:
+        status = profile.row_status(features).reshape(n, months)
+        by_feature = {
+            name: flags.reshape(n, months) for name, flags in profile.outside(features).items()
+        }
     return ScenarioResult(
-        pool.pool_id, scenario, t0, path.rate_30y[start : start + months], projection.pool, share
+        pool.pool_id,
+        scenario,
+        t0,
+        path.rate_30y[start : start + months],
+        projection.pool,
+        share,
+        line_balance=balance,
+        support_status=status,
+        outside_by_feature=by_feature,
     )
 
 

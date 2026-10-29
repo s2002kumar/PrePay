@@ -24,6 +24,7 @@ from prepay.io import read_json, write_json_atomic
 from prepay.modeling.lockbox import load_seal
 from prepay.modeling.registry import Run, load_run
 from prepay.provenance import git_sha, tree_digest
+from prepay.reliability.support import SupportProfile
 
 BUNDLE_MANIFEST = "bundle-manifest.json"
 NOTICE = (
@@ -43,6 +44,7 @@ class DemoBundle:
     run: Run
     rates: RatePath
     model_quality: dict[str, Any]
+    profile: SupportProfile | None = None  # R1 applicability monitor (ADR 0009 §7)
 
     @property
     def support(self) -> dict[str, dict[str, float]]:
@@ -68,7 +70,9 @@ def load_bundle(root: Path) -> DemoBundle:
         rate_15y=np.asarray(rates_payload["rate_15y"], dtype=np.float64),
         application_based=np.asarray(rates_payload["application_based"], dtype=bool),
     )
-    return DemoBundle(root, manifest, run, rates, read_json(root / "model_quality.json"))
+    support = root / "support.json"
+    profile = SupportProfile.from_json(read_json(support)) if support.is_file() else None
+    return DemoBundle(root, manifest, run, rates, read_json(root / "model_quality.json"), profile)
 
 
 def _quality_summary(run_dir: Path) -> dict[str, Any]:
@@ -132,8 +136,19 @@ def _force_remove(function: Any, path: str, _: BaseException) -> None:
     function(path)
 
 
-def assemble_bundle(out: Path, run_dir: Path, bronze_root: Path, *, preset: str) -> Path:
-    """Copy a sealed, lockbox-evaluated synthetic run plus its rate history into ``out``."""
+def assemble_bundle(
+    out: Path,
+    run_dir: Path,
+    bronze_root: Path,
+    *,
+    preset: str,
+    support_profile: SupportProfile | None = None,
+) -> Path:
+    """Copy a sealed, lockbox-evaluated synthetic run plus its rate history into ``out``.
+
+    ``support_profile`` (fitted on the run's own training rows) lets the API state whether each
+    projection is inside the model's training support.
+    """
     from prepay.features.panel import rate_path_from_bronze
 
     if read_json(run_dir / "run-manifest.json").get("synthetic") is not True:
@@ -154,6 +169,8 @@ def assemble_bundle(out: Path, run_dir: Path, bronze_root: Path, *, preset: str)
         },
     )
     write_json_atomic(out / "model_quality.json", _quality_summary(run_dir))
+    if support_profile is not None:
+        write_json_atomic(out / "support.json", support_profile.to_json())
     write_json_atomic(
         out / BUNDLE_MANIFEST,
         {
@@ -175,6 +192,7 @@ def build_bundle(out: Path, *, preset: str = "ci", work_dir: Path | None = None)
     from prepay.ingest.lock import create_lock
     from prepay.modeling.lockbox import evaluate_lockbox, seal
     from prepay.modeling.train import train
+    from prepay.reliability.support import profile_for_run
     from prepay.synthetic.config import PRESETS
     from prepay.synthetic.dataset import generate_dataset
     from prepay.transform import run_dbt
@@ -194,7 +212,13 @@ def build_bundle(out: Path, *, preset: str = "ci", work_dir: Path | None = None)
         run_dir = train(work / "data", lock, work / "runs", truth_dir=work / "source" / "truth")
         seal(run_dir)
         evaluate_lockbox(run_dir, work / "data", lock)
-        assemble_bundle(out, run_dir, work / "data" / "bronze", preset=preset)
+        assemble_bundle(
+            out,
+            run_dir,
+            work / "data" / "bronze",
+            preset=preset,
+            support_profile=profile_for_run(work / "data", run_dir),
+        )
         _make_writable(work)
     return out
 

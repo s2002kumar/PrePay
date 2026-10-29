@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
@@ -59,6 +60,19 @@ OUTSIDE_OR_SPARSE_EXTRAPOLATING = 0.20
 SUPPORTED, SPARSE, OUTSIDE = 0, 1, 2
 Verdict = Literal["supported", "extrapolating", "unsupported"]
 Features = Mapping[str, npt.NDArray[Any]]
+
+
+def decide(outside_share: float, sparse_share: float, *, has_psi_flag: bool = False) -> Verdict:
+    """ADR 0009 §7 verdict from balance- or count-weighted shares."""
+    if outside_share >= OUTSIDE_UNSUPPORTED:
+        return "unsupported"
+    if (
+        outside_share >= OUTSIDE_EXTRAPOLATING
+        or outside_share + sparse_share >= OUTSIDE_OR_SPARSE_EXTRAPOLATING
+        or has_psi_flag
+    ):
+        return "extrapolating"
+    return "supported"
 
 
 def _values(features: Features, name: str) -> FloatArray:
@@ -185,17 +199,7 @@ class SupportProfile:
         reasons = [f"{name} outside training range" for name, s in by_feature.items() if s > 0]
         if psi_flags:
             reasons.append(f"PSI > {PSI_REVIEW} for {', '.join(psi_flags)}")
-        verdict: Verdict
-        if outside_share >= OUTSIDE_UNSUPPORTED:
-            verdict = "unsupported"
-        elif (
-            outside_share >= OUTSIDE_EXTRAPOLATING
-            or outside_share + sparse_share >= OUTSIDE_OR_SPARSE_EXTRAPOLATING
-            or psi_flags
-        ):
-            verdict = "extrapolating"
-        else:
-            verdict = "supported"
+        verdict = decide(outside_share, sparse_share, has_psi_flag=bool(psi_flags))
         return {
             "rows": int(status.shape[0]),
             "weighting": "count" if weights is None else "balance",
@@ -242,3 +246,21 @@ class SupportProfile:
             cell_payoffs=payload["cell_payoffs"],
             training_rows=int(payload["training_rows"]),
         )
+
+
+def profile_for_run(data_root: Path, run_dir: Path) -> SupportProfile:
+    """Fit the profile on a run's own training rows (same window and loan-hash sample)."""
+    import duckdb
+
+    from prepay import periods
+    from prepay.io import read_json
+    from prepay.modeling.registry import training_sample
+    from prepay.modeling.windows import Window, read_window
+    from prepay.transform import warehouse_path
+
+    manifest = read_json(run_dir / "run-manifest.json")
+    fraction, index = training_sample(manifest)
+    window = Window("train", "train", 0, periods.parse_iso(manifest["windows"]["train"]["last"]))
+    with duckdb.connect(str(warehouse_path(data_root)), read_only=True) as con:
+        train = read_window(con, window, sample_fraction=fraction, sample_index=index)
+    return SupportProfile.fit(train.features, train.outcome_class)
