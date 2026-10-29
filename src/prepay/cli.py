@@ -317,6 +317,25 @@ def _cmd_diagnose_stability(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_forward_register(args: argparse.Namespace) -> int:
+    from prepay.evaluation.forward import register
+    from prepay.ingest.lock import read_lock
+
+    members = {"REF": Path(args.ref), "DEV2017": Path(args.dev), "REFIT2026": Path(args.refit)}
+    target = register(Path(args.out), members, read_lock(Path(args.lock)))
+    _emit({"registration": target.as_posix(), "status": "written"})
+    return 0
+
+
+def _cmd_forward_evaluate(args: argparse.Namespace) -> int:
+    from prepay.evaluation.forward import evaluate
+    from prepay.ingest.lock import read_lock
+
+    target = evaluate(Path(args.registry), Path(args.data_root), read_lock(Path(args.lock)))
+    _emit({"report": target.as_posix(), "status": "written"})
+    return 0
+
+
 def _cmd_fingerprint(args: argparse.Namespace) -> int:
     from prepay.audit.fingerprint import warehouse_fingerprint
     from prepay.io import write_json_atomic
@@ -690,6 +709,40 @@ def build_parser() -> argparse.ArgumentParser:
     exp_roll.add_argument("--origins", help="comma-separated YYYY-MM origins (default: ADR 0009)")
     exp_roll.add_argument("--models", help="comma-separated subset of the development families")
     exp_roll.set_defaults(handler=_cmd_experiment_rolling)
+
+    forward = sub.add_parser(
+        "forward",
+        help="ADR 0010 forward evaluation: register sealed runs, then evaluate each new lock once",
+    )
+    forward_sub = forward.add_subparsers(dest="forward_command", required=True)
+    forward_register = forward_sub.add_parser(
+        "register",
+        help="write the write-once registration before any forward month exists",
+        description=(
+            "Records the three sealed member runs of ADR 0010 (REF, DEV2017, REFIT2026), the "
+            "comparison families, business tolerances and the seen-through month (the lock's "
+            "cutoff). Refuses members trained on a different lock."
+        ),
+    )
+    forward_register.add_argument("--ref", required=True, help="sealed primary run directory")
+    forward_register.add_argument("--dev", required=True, help="sealed DEV2017 run directory")
+    forward_register.add_argument("--refit", required=True, help="sealed REFIT2026 run directory")
+    forward_register.add_argument("--lock", required=True, help="the lock the members used")
+    forward_register.add_argument("--out", required=True, help="registry directory")
+    forward_register.set_defaults(handler=_cmd_forward_register)
+    forward_evaluate = forward_sub.add_parser(
+        "evaluate",
+        help="score every registered model on months after the seen-through month, once per lock",
+        description=(
+            "Verifies the registration and every member seal, refuses a lock that is not a later "
+            "release with at least the registered number of forward months, reads only months "
+            "after the seen-through month, and writes a read-only report. Prints only its path."
+        ),
+    )
+    forward_evaluate.add_argument("--registry", required=True)
+    forward_evaluate.add_argument("--data-root", required=True)
+    forward_evaluate.add_argument("--lock", required=True)
+    forward_evaluate.set_defaults(handler=_cmd_forward_evaluate)
 
     fingerprint = sub.add_parser(
         "fingerprint", help="row count and order-independent content hash of every warehouse table"

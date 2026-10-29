@@ -192,3 +192,28 @@ uv run prepay diagnose stability --kind seeds --data-root <data-root>   --lock c
   attribution (D5), plus fold wins and ranks. It is development evidence (ADR 0009 §2). It ranks
   and explains candidates; it never confirms one.
 - Member runs refuse the lockbox. They are judged only on forward months (ADR 0010).
+
+### Forward evaluation (ADR 0010): register now, evaluate once per later release
+
+Register the three sealed members **before** any reporting month after 2026-06 is downloaded.
+`--lock` is the Release 48 lock all three were trained on; its cutoff becomes the seen-through
+month.
+
+```bash
+uv run prepay forward register --ref artifacts/runs/<primary_run_id>   --dev artifacts/experiments/<DEV2017_run_id> --refit artifacts/experiments/<REFIT2026_run_id>   --lock configs/data.lock.json --out artifacts/forward/adr0010
+```
+
+When a later release reaches a cutoff of 2027-06 or later, lock it, ingest and transform it into
+a **new** data root, then evaluate:
+
+```bash
+uv run prepay forward evaluate --registry artifacts/forward/adr0010   --data-root <new-data-root> --lock configs/data.lock.r52.json
+```
+
+- It refuses a member's own lock, an equal or earlier release, fewer than 12 forward months (no
+  interim looks), a lock it has already evaluated, and any change to the registration or to a
+  sealed member.
+- The first report is the primary opening. Each later release adds a monitoring report and
+  never replaces the first one.
+- A new release can't be ingested until its layout is verified and added to
+  `prepay.contracts.sflld.RELEASES` (ADR 0002). That's a deliberate stop, not a bug.
