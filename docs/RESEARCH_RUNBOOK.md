@@ -170,6 +170,23 @@ uv run prepay experiment run --preset REFIT2026 --data-root <data-root>   --lock
 uv run prepay seal --run artifacts/experiments/<run_id>
 ```
 
+```bash
+# Failure-hypothesis diagnostics for the sealed primary run (outcomes through 2019-12; later
+# windows are read as feature columns only). Writes the report and the run's support profile.
+uv run prepay diagnose probes --run artifacts/runs/<primary_run_id> --data-root <data-root>   --lock configs/data.lock.json --out reports/real/diagnostics-primary.json
+# Sampling (D6) and seed (D7) stability on the DEV2017 windows: 5 refits each.
+uv run prepay diagnose stability --kind samples --data-root <data-root>   --lock configs/data.lock.json --out artifacts/experiments --train-sample-fraction 0.1
+uv run prepay diagnose stability --kind seeds --data-root <data-root>   --lock configs/data.lock.json --out artifacts/experiments --train-sample-fraction 0.1
+```
+
+- `diagnose probes` answers H-ERA and H-SUP directly. It reports:
+  - which features encode the pre-2009 era (D1);
+  - every model's response to incentive, **rate level at fixed incentive**, burnout, age,
+    seasonality, rate change and loan size, with ICE monotonicity (D2);
+  - how much of each window lies outside or at the thin edge of training support (D3).
+
+  Its flags follow ADR 0009 §6.
+
 - `rolling-origin` writes `artifacts/experiments/rolling-origin-<UTC>.json`: per fold and model,
   log loss, paired differences vs B2 and M1, A/E, regime calibration (D4) and cohort error
   attribution (D5), plus fold wins and ranks. It is development evidence (ADR 0009 §2). It ranks

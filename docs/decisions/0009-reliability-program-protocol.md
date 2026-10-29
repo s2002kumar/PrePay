@@ -122,6 +122,19 @@ without disturbing the original study. Two constraints shape everything here:
     first real-data run of the affected experiment. After that run, a change needs a new
     experiment ID, and both results are reported.
 
+## Amendment 1 (2026-10-29, before any real-data run of R1 or D3)
+
+**PSI applies to populations, not pools.** §7 is amended:
+
+- The PSI condition applies to **population batches**: evaluation windows, monitoring windows
+  and forward months.
+- A **pool projection** is judged on row-level support only (outside and sparse shares, weighted
+  by balance). A small pool always differs from the training population in its mix, so its PSI
+  would measure that mix rather than whether the model has support. Every pool of identical
+  supported loans would come out `extrapolating`.
+
+Implemented in `prepay.reliability.support.SupportProfile.assess(population=...)`.
+
 ## Consequences
 
 The program can learn from the failure without rewriting it. The real-data evidence it produces

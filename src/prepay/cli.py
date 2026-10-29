@@ -272,6 +272,51 @@ def _cmd_experiment_rolling(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_diagnose_probes(args: argparse.Namespace) -> int:
+    from prepay.ingest.lock import read_lock
+    from prepay.io import write_json_atomic
+    from prepay.modeling.diagnostics import diagnose_run
+
+    report, profile = diagnose_run(
+        Path(args.run),
+        Path(args.data_root),
+        read_lock(Path(args.lock)),
+        reference_fraction=args.reference_fraction,
+        allow_opened=args.exploratory_opened_windows,
+    )
+    out = Path(args.out)
+    support = out.with_name(f"{out.stem}.support.json")
+    write_json_atomic(out, report)
+    write_json_atomic(support, profile.to_json())
+    _emit({"out": out.as_posix(), "support_profile": support.as_posix(), "status": "written"})
+    return 0
+
+
+def _cmd_diagnose_stability(args: argparse.Namespace) -> int:
+    from prepay import periods
+    from prepay.ingest.lock import read_lock
+    from prepay.modeling.diagnostics import stability
+    from prepay.modeling.experiment import (
+        DEVELOPMENT_FAMILIES,
+        ExperimentConfig,
+        preset,
+    )
+
+    lock = read_lock(Path(args.lock))
+    windows = preset("DEV2017", periods.parse_iso(lock.performance_cutoff_month)).windows
+    base = ExperimentConfig("D6", windows, DEVELOPMENT_FAMILIES, designated="B2_logistic")
+    target = stability(
+        Path(args.data_root),
+        lock,
+        Path(args.out),
+        kind=args.kind,
+        base=_experiment_config(args, base),
+        replicates=args.replicates,
+    )
+    _emit({"report": target.as_posix(), "status": "written"})
+    return 0
+
+
 def _cmd_fingerprint(args: argparse.Namespace) -> int:
     from prepay.audit.fingerprint import warehouse_fingerprint
     from prepay.io import write_json_atomic
@@ -569,6 +614,39 @@ def build_parser() -> argparse.ArgumentParser:
     regimes.add_argument("--cutoff", default="2026-06", help="performance cutoff, YYYY-MM")
     regimes.add_argument("--out", required=True, help="JSON report path")
     regimes.set_defaults(handler=_cmd_rate_regimes)
+    probes = diagnose_sub.add_parser(
+        "probes",
+        help="D1 era encoding, D2 economic probes and D3 support map for a run",
+        description=(
+            "Probes every model of a run on its calibration window (outcomes through 2019-12 for "
+            "the primary run and DEV2017), measures which features encode the pre-2009 era, and "
+            "maps each window's training support from feature columns only. Writes the report "
+            "and the run's support profile; prints only their paths."
+        ),
+    )
+    probes.add_argument("--run", required=True)
+    probes.add_argument("--data-root", required=True)
+    probes.add_argument("--lock", required=True)
+    probes.add_argument("--out", required=True, help="JSON report path")
+    probes.add_argument("--reference-fraction", type=float, default=0.02)
+    probes.add_argument(
+        "--exploratory-opened-windows",
+        action="store_true",
+        help="allow a calibration window from 2020-01 on (REFIT2026); labeled exploratory",
+    )
+    probes.set_defaults(handler=_cmd_diagnose_probes)
+    stability_cmd = diagnose_sub.add_parser(
+        "stability",
+        help="D6 disjoint-sample or D7 seed stability on the DEV2017 windows",
+    )
+    stability_cmd.add_argument("--kind", required=True, choices=["samples", "seeds"])
+    stability_cmd.add_argument("--data-root", required=True)
+    stability_cmd.add_argument("--lock", required=True)
+    stability_cmd.add_argument("--out", default="artifacts/experiments")
+    stability_cmd.add_argument("--train-sample-fraction", type=float)
+    stability_cmd.add_argument("--replicates", type=int, default=5)
+    stability_cmd.add_argument("--models", help="comma-separated development families")
+    stability_cmd.set_defaults(handler=_cmd_diagnose_stability)
 
     experiment = sub.add_parser(
         "experiment",
