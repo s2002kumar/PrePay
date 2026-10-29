@@ -149,24 +149,47 @@ calibrated losses.
 
 ## 7. Software tests and controls
 
-296 automated tests (2026-10-29): Decimal oracle, Hypothesis properties, mutation kills, independent label
+360+ automated Python tests (2026-10-29): Decimal oracle, Hypothesis properties, mutation kills, independent label
 oracle, feature parity, truth recovery, holdout spy, seal tamper detection, and one-shot lockbox
-refusal. CI runs synthetic-only with SHA-pinned actions.
+refusal, plus the reliability program's known-answer probes, forward-evaluation refusals and
+curtailment validation. CI runs synthetic-only with SHA-pinned actions.
 
 ## 8. Limitations and open items
 
 - The real-data study (training, one sealed opening, segments, credit sufficiency, cohort
   run-off, censoring bounds) was run privately. It is unpublished and has not been independently
-  reviewed. PSI drift monitoring is **not built**.
+  reviewed. The selected model failed pre-registered checks across rate regimes. It is
+  **not approved as a reliable forecaster** (docs/RELIABILITY_PLAN.md).
 - The real test windows (2020-01 to 2026-06) have now been opened once. Any revised model can be
   judged fairly only on reporting months after 2026-06, from a later release (ADR 0007, ADR 0008).
-- Seed-repeat stability and feature ablations are not built.
+  The forward mechanism and its pre-registration are built (ADR 0010), but no forward month exists
+  yet.
+- PSI drift, seed and sample stability, and support maps are built (diagnostics D3, D6, D7) and
+  wait for owner-run real-data execution. Feature ablations beyond the rate-level removal
+  (X1/X2) are not built.
 - The parsimony rule is underpowered on small validation windows (ADR 0004).
-- Curtailments aren't modeled; CPR figures are full-payoff-only proxies.
+- Curtailments aren't modeled; CPR figures are full-payoff-only proxies. A feasibility method
+  with a pre-declared rule exists (docs/validation/CURTAILMENTS.md). Its real-data half hasn't
+  run.
 
 ## 9. Change control and monitoring
 
 Every run records its data-lock, feature-contract, software-lock and Git digests. A changed
 model is a new run with its own seal, and the first holdout report of a sealed run is never
-replaced. Planned monitoring: feature PSI (> 0.25 = review trigger), missingness, and observed
-vs predicted payoff rates once outcomes mature.
+replaced. Monitoring is built:
+- feature PSI (> 0.25 is a review trigger) and the applicability verdict of ADR 0009 §7;
+- forward reports, once per later release, with observed vs predicted payoffs and business
+  tolerances (ADR 0010).
+
+## 10. Reliability program
+
+After the failed real-data checks, the program in `docs/RELIABILITY_PLAN.md` did three things:
+- ranked twelve failure hypotheses and built a test for each;
+- added economically constrained candidates (X1–X3, H1) that can't use rate level as an era
+  proxy;
+- put an applicability verdict, a model-family range and an explicit credit assumption into
+  every demo projection.
+
+Its evidence classes (ADR 0009) keep anything designed after the failures from being validated
+on the same months. Only forward months can confirm an improvement. Reviewer packet:
+`docs/reviews/R1.md`.

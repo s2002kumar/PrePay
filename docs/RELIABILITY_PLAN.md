@@ -184,7 +184,7 @@ tantrum, and the 2018 rise.
 
 | ID | Item | Status |
 |---|---|---|
-| P1 | `prepay forward register` / `prepay forward evaluate`. Register sealed runs and criteria before any forward month exists. Evaluate only months after 2026-06 from a later lock. Write once per lock; the first report with ≥ 12 forward months is the primary opening. Tests: holdout spy, tamper refusal, second-evaluation refusal. | to build |
+| P1 | `prepay forward register` / `prepay forward evaluate`. Register sealed runs and criteria before any forward month exists. Evaluate only months after 2026-06 from a later lock. Write once per lock; the first report with ≥ 12 forward months is the primary opening. Tests: holdout spy, tamper refusal, second-evaluation refusal. | built (synthetic) |
 | P2 | Criteria: paired log loss (Holm-adjusted across the primary family) and business tolerances T1–T5 in hindsight mode. | pre-registered in ADR 0010 |
 
 ## 7. Expected implementation changes
@@ -267,7 +267,16 @@ uv run prepay diagnose rate-regimes --pmms-dir scratch/pmms --out scratch/rate-r
 | O4 | Invite an independent reviewer for the reliability packet | Independent validation |
 | O5 | Complete the data-use permission review (hosted AI, publication) | Agent-assisted analysis of private aggregates |
 
-## 13. Progress
+## 13. Progress (2026-10-29)
 
-Progress, commands and dates are tracked in `docs/STATUS.md` (Reliability program section). This
-plan changes only by dated amendment.
+| Area | Built and tested on synthetic data | Waiting for |
+|---|---|---|
+| Diagnostics D1–D7 | D1, D2, D3, D4, D5, D6, D7 | Owner-run E1 (RESEARCH_RUNBOOK §8); D8 needs those results |
+| Candidates | X1, X2, X3, H1; DEV2017 and REFIT2026 presets | Owner training and sealing before any post-2026-06 download |
+| Development protocol V1 | rolling-origin folds | Owner run |
+| Forward P1–P2 | registration, evaluation, Holm families, T1–T6 | A release with cutoff ≥ 2027-06 |
+| Safeguards R1–R3 | verdict, model range, range-first headline, in the demo API and UI | Real-data A/E band for R2 (needs E1) |
+| Finance F1–F3 | F1 method and synthetic rule; F2 credit assumption; F3 ledger lines | F1 real-data rule (owner-run) |
+
+The commands, evidence and dates are in `docs/STATUS.md`. The reviewer packet is
+`docs/reviews/R1.md`. This plan changes only by dated amendment.

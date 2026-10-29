@@ -64,6 +64,7 @@ real-data outputs aren't read by the agent (ADR 0009 §3).
 | F2 credit exits as an explicit assumption (training-period CDR unless validated, or user-set CDR) | built (synthetic demo) | `prepay.reliability.credit`; `tests/unit/test_credit_assumption.py` (Hypothesis: coherent, conditional payoff preserved); API `credit.annual_cdr_pct` |
 | F1 curtailment feasibility: DDLPI-aware estimator under both servicing conventions, rounding and transition exclusions, pre-declared decision rule | synthetic rule **passes**; real-data rule not run (owner-run); engine still models no curtailments | `prepay.evaluation.curtailment`, `prepay diagnose curtailments`; `tests/unit/test_curtailment.py`, `tests/integration/test_curtailment_study.py`; [CURTAILMENTS.md](validation/CURTAILMENTS.md) |
 | D8 post-mortem on opened windows, F3 cash-flow component report | not built (D8 needs owner-run real data; F3's components are already separate ledger lines) | — |
+| Reviewer packet R1 (implementation and methodology; readiness verdict: **not ready for real-world claims**) | written | [docs/reviews/R1.md](reviews/R1.md) |
 
 ## Acceptance gates (SPEC §4)
 
