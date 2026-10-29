@@ -190,6 +190,26 @@ def _cmd_diagnose_incentive(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_rate_regimes(args: argparse.Namespace) -> int:
+    from prepay import periods
+    from prepay.evaluation.regimes import rate_regime_facts
+    from prepay.features.machine import RatePath
+    from prepay.ingest.pmms import parse_fred_csv
+    from prepay.io import write_json_atomic
+    from prepay.modeling.windows import standard_windows
+
+    series = {}
+    for name in ("MORTGAGE30US", "MORTGAGE15US"):
+        text = (Path(args.pmms_dir) / f"{name}.csv").read_text(encoding="utf-8")
+        observations = parse_fred_csv(text, name)
+        series[name] = (list(observations.dates), list(observations.rate_pct))
+    rates = RatePath.from_weekly(*series["MORTGAGE30US"], *series["MORTGAGE15US"])
+    report = rate_regime_facts(rates, standard_windows(periods.parse_iso(args.cutoff)))
+    write_json_atomic(Path(args.out), report)
+    _emit({"out": args.out, "train_era_check": report["train_era_check"]})
+    return 0
+
+
 def _cmd_fingerprint(args: argparse.Namespace) -> int:
     from prepay.audit.fingerprint import warehouse_fingerprint
     from prepay.io import write_json_atomic
@@ -468,6 +488,25 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose.add_argument("--out", required=True)
     diagnose.add_argument("--truth-dir", help="synthetic truth/ directory (adds the true curve)")
     diagnose.set_defaults(handler=_cmd_diagnose_incentive)
+
+    diagnose_group = sub.add_parser(
+        "diagnose",
+        help="reliability-program diagnostics (ADR 0009); public or aggregate outputs only",
+    )
+    diagnose_sub = diagnose_group.add_subparsers(dest="diagnose_command", required=True)
+    regimes = diagnose_sub.add_parser(
+        "rate-regimes",
+        help="public PMMS facts: rates seen by the models per window vs the training range",
+        description=(
+            "Reads FRED MORTGAGE30US.csv and MORTGAGE15US.csv (public) and reports, per MODELING "
+            "§5 window, the month-end rates known at t-1 against the training window's range. "
+            "Reads no loan data."
+        ),
+    )
+    regimes.add_argument("--pmms-dir", required=True, help="directory with the FRED CSV files")
+    regimes.add_argument("--cutoff", default="2026-06", help="performance cutoff, YYYY-MM")
+    regimes.add_argument("--out", required=True, help="JSON report path")
+    regimes.set_defaults(handler=_cmd_rate_regimes)
 
     fingerprint = sub.add_parser(
         "fingerprint", help="row count and order-independent content hash of every warehouse table"

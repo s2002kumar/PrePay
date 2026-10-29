@@ -43,6 +43,19 @@ not repaired, and the sealed result is unchanged. Any revised model would be a s
 evaluated only on reporting months after the Release 48 cutoff (ADR 0006 §11, ADR 0007, and the
 proposed experiment in ADR 0008).
 
+## Reliability program (started 2026-10-29)
+
+`docs/RELIABILITY_PLAN.md` holds the ranked failure hypotheses, experiments and acceptance
+criteria. Protocol: ADR 0009. Forward pre-registration: ADR 0010 (with ADR 0008). Prepay is **not
+approved** as a reliable forecasting product. Every real-data step is run by the owner, and
+real-data outputs aren't read by the agent (ADR 0009 §3).
+
+| Item | Status | Evidence |
+|---|---|---|
+| Plan, ranked hypotheses, protocol (ADR 0009), forward pre-registration (ADR 0010) | accepted 2026-10-29 | `docs/RELIABILITY_PLAN.md`, `docs/decisions/0009-*`, `docs/decisions/0010-*` |
+| Public rate-regime facts (§3.1) | built | `prepay diagnose rate-regimes`, `tests/unit/test_regimes.py`; run on FRED PMMS retrieved 2026-10-29 |
+| Diagnostics D1–D8, candidates X1–X3 and H1, rolling origin V1, forward mechanism P1, safeguards R1–R3, finance F1–F3 | not built | — |
+
 ## Acceptance gates (SPEC §4)
 
 | ID | Gate | Status | Evidence | Known gaps |
