@@ -200,6 +200,17 @@ def _cmd_fingerprint(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_rehearse_lockbox(args: argparse.Namespace) -> int:
+    from prepay.ingest.lock import read_lock
+    from prepay.io import write_json_atomic
+    from prepay.modeling.lockbox import rehearse_lockbox
+
+    report = rehearse_lockbox(Path(args.run), Path(args.data_root), read_lock(Path(args.lock)))
+    write_json_atomic(Path(args.out), report)
+    _emit({"out": args.out, "rows": report["rows"], "stages": report["stages"]})
+    return 0
+
+
 def _cmd_seal(args: argparse.Namespace) -> int:
     from prepay.modeling.lockbox import seal
 
@@ -464,6 +475,16 @@ def build_parser() -> argparse.ArgumentParser:
     fingerprint.add_argument("--data-root", required=True)
     fingerprint.add_argument("--out", required=True)
     fingerprint.set_defaults(handler=_cmd_fingerprint)
+
+    rehearse = sub.add_parser(
+        "rehearse-lockbox",
+        help="run the lockbox code path on non-holdout months first (time, memory, crashes)",
+    )
+    rehearse.add_argument("--run", required=True)
+    rehearse.add_argument("--data-root", required=True)
+    rehearse.add_argument("--lock", required=True)
+    rehearse.add_argument("--out", required=True)
+    rehearse.set_defaults(handler=_cmd_rehearse_lockbox)
 
     seal_cmd = sub.add_parser("seal", help="freeze a run's candidate before any holdout access")
     seal_cmd.add_argument("--run", required=True, help="artifacts/runs/<run_id>")

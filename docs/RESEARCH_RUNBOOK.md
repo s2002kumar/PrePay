@@ -125,6 +125,19 @@ Before sealing, `uv run prepay diagnose-incentive --run <run> --data-root <data-
 configs/data.lock.json --out reports/real/diagnose-incentive.json` shows B1's training support per
 incentive bin and every model's incentive response on Validation B rows (ADR 0007).
 
+Then rehearse the lockbox on non-holdout months:
+
+```bash
+uv run prepay rehearse-lockbox --run artifacts/runs/<run_id> --data-root <data-root> \
+  --lock configs/data.lock.json --out reports/real/lockbox-rehearsal.json
+```
+
+The lockbox writes its report only at the end, so a crash part-way through would read the holdout
+and leave nothing. The rehearsal runs the same code (window scoring, segments, cohort and run-off
+backtests) on Validation B and on the cohort active at the end of the training window, capped at
+2019-12. It records stage times and peak RSS. Scale the projection by row count before opening.
+Validation B is in-sample for calibration, so the rehearsal's metrics are not evidence.
+
 ## 7. Seal, then evaluate the holdout once
 
 ```bash
@@ -134,5 +147,7 @@ uv run prepay evaluate-lockbox --run artifacts/runs/<run_id> --data-root <data-r
 
 The first evaluation is written read-only to `evaluations/first.json` and can't be repeated
 for that run. Besides the ADR 0004 metrics, it holds the ADR 0006 secondary analyses: segment
-tables, credit gating, balance run-off and informative-censoring bounds. Report it as is, including any baseline win or degradation flag. Don't publish
-real-data results without the terms review described at the top of this runbook.
+tables, credit gating, balance run-off and informative-censoring bounds. Report it as is,
+including any baseline win or degradation flag. Don't publish real-data results without the
+terms review described at the top of this runbook. After the opening, the test windows can't
+judge a revised model fairly; ADR 0008 describes the forward-month experiment instead.

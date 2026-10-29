@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 import stat
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -18,14 +19,16 @@ from typing import Any
 import duckdb
 
 from prepay import periods
+from prepay.evaluation.cohort import Predictor
 from prepay.evaluation.cohort import backtest as cohort_backtest
 from prepay.evaluation.runoff import runoff_backtest
 from prepay.evaluation.segments import segment_report
+from prepay.features.batch import PanelBatch
 from prepay.features.panel import rate_path_from_bronze
 from prepay.ingest.lock import DataLock
 from prepay.io import read_json, sha256_file, write_json_atomic
 from prepay.modeling import metrics
-from prepay.modeling.registry import MANIFEST, load_run
+from prepay.modeling.registry import MANIFEST, Run, load_run
 from prepay.modeling.train import CREDIT_MIN_VALIDATION_EVENTS
 from prepay.modeling.windows import read_window, standard_windows
 from prepay.provenance import tree_digest
@@ -121,6 +124,52 @@ def load_seal(run_dir: Path) -> Seal:
     return found
 
 
+def _score_window(
+    batch: PanelBatch,
+    run: Run,
+    selected_name: str,
+    base_val: dict[str, Any],
+    credit_validated: bool,
+) -> dict[str, Any]:
+    """Every model's metrics, the pre-declared flags, credit gating and segments for one window."""
+    predictions = {name: model.predict_proba(batch) for name, model in run.models.items()}
+    predictions["selected"] = run.selected.predict_proba(batch)
+    result = {name: metrics.evaluate(batch, p) for name, p in predictions.items()}
+    # The selected model against the *other* baselines, and the GBM against B1 and B2
+    # on every holdout whichever model was selected (MODELING §9).
+    differences = {
+        ref: metrics.paired_difference(batch, predictions["selected"], predictions[ref])
+        for ref in ("B1_lookup", "B2_logistic")
+        if ref != selected_name
+    }
+    gbm_vs_baselines = {
+        ref: metrics.paired_difference(batch, predictions["M1_lightgbm"], predictions[ref])
+        for ref in ("B1_lookup", "B2_logistic")
+    }
+    result["_flags"] = {
+        "beats_baselines": all(float(d["high"]) < 0 for d in differences.values()),
+        "gbm_vs_baselines": gbm_vs_baselines,
+        "log_loss_degradation": result["selected"]["log_loss"] > 1.2 * base_val["log_loss"],
+        "prepay_calibration_degradation": result["selected"]["prepay"]["ece"]
+        > 2 * base_val["prepay"]["ece"],
+        "paired_difference_vs": differences,
+    }
+    credit_events = int((batch.outcome_class == 2).sum())
+    result["_credit"] = {
+        "credit_events": credit_events,
+        "metrics_interpretable": credit_validated and credit_events >= CREDIT_MIN_VALIDATION_EVENTS,
+    }
+    result["_segments"] = segment_report(batch, predictions)
+    return result
+
+
+def _cohort_models(run: Run) -> dict[str, Predictor]:
+    return {
+        "selected": run.selected,
+        **{n: run.models[n] for n in ("B1_lookup", "B2_logistic", "M1_lightgbm")},
+    }
+
+
 def evaluate_lockbox(run_dir: Path, data_root: Path, lock: DataLock) -> dict[str, Any]:
     sealed = load_seal(run_dir)
     out = run_dir / FIRST_EVALUATION
@@ -132,13 +181,13 @@ def evaluate_lockbox(run_dir: Path, data_root: Path, lock: DataLock) -> dict[str
     if lock.fingerprint() != sealed.payload["data_lock_fingerprint"]:
         raise LockboxError("data lock differs from the one the run was trained on")
     run = load_run(run_dir)
-    selected = run.selected
     cutoff = periods.parse_iso(lock.performance_cutoff_month)
     windows = {w.name: w for w in standard_windows(cutoff)}
     validation = read_json(run_dir / "validation.json")
     credit = read_json(run_dir / MANIFEST).get("credit_sufficiency")
     credit_validated = bool(credit and credit["credit_hazard_validated"])
     selected_name = sealed.payload["candidate"]
+    base_val = validation[selected_name]["validation_b"]
     con: duckdb.DuckDBPyConnection = duckdb.connect(str(warehouse_path(data_root)), read_only=True)
     results: dict[str, Any] = {}
     try:
@@ -147,47 +196,10 @@ def evaluate_lockbox(run_dir: Path, data_root: Path, lock: DataLock) -> dict[str
             if batch.rows == 0:
                 results[name] = {"rows": 0, "note": "no at-risk rows in this window"}
                 continue
-            predictions = {
-                model_name: model.predict_proba(batch) for model_name, model in run.models.items()
-            }
-            predictions["selected"] = selected.predict_proba(batch)
-            window_result = {
-                model_name: metrics.evaluate(batch, p) for model_name, p in predictions.items()
-            }
-            # The selected model against the *other* baselines, and the GBM against B1 and B2
-            # on every holdout whichever model was selected (MODELING §9).
-            differences = {
-                ref: metrics.paired_difference(batch, predictions["selected"], predictions[ref])
-                for ref in ("B1_lookup", "B2_logistic")
-                if ref != selected_name
-            }
-            gbm_vs_baselines = {
-                ref: metrics.paired_difference(batch, predictions["M1_lightgbm"], predictions[ref])
-                for ref in ("B1_lookup", "B2_logistic")
-            }
-            base_val = validation[selected_name]["validation_b"]
-            window_result["_flags"] = {
-                "beats_baselines": all(float(d["high"]) < 0 for d in differences.values()),
-                "gbm_vs_baselines": gbm_vs_baselines,
-                "log_loss_degradation": window_result["selected"]["log_loss"]
-                > 1.2 * base_val["log_loss"],
-                "prepay_calibration_degradation": window_result["selected"]["prepay"]["ece"]
-                > 2 * base_val["prepay"]["ece"],
-                "paired_difference_vs": differences,
-            }
-            credit_events = int((batch.outcome_class == 2).sum())
-            window_result["_credit"] = {
-                "credit_events": credit_events,
-                "metrics_interpretable": credit_validated
-                and credit_events >= CREDIT_MIN_VALIDATION_EVENTS,
-            }
-            window_result["_segments"] = segment_report(batch, predictions)
+            window_result = _score_window(batch, run, selected_name, base_val, credit_validated)
             results[name] = {"window": windows[name].label, **window_result}
         history = rate_path_from_bronze(data_root / "bronze")
-        cohort_models = {
-            "selected": selected,
-            **{n: run.models[n] for n in ("B1_lookup", "B2_logistic", "M1_lightgbm")},
-        }
+        cohort_models = _cohort_models(run)
         cohorts = {
             periods.to_iso(windows[name].first - 1): cohort_backtest(
                 con,
@@ -228,3 +240,80 @@ def evaluate_lockbox(run_dir: Path, data_root: Path, lock: DataLock) -> dict[str
     write_json_atomic(out, report)
     _read_only(out)
     return report
+
+
+class _NonHoldout:
+    """Stands in for a seal: the rehearsal reads only training and validation months."""
+
+    def verify(self) -> None:
+        return None
+
+
+def rehearse_lockbox(run_dir: Path, data_root: Path, lock: DataLock) -> dict[str, Any]:
+    """Dress rehearsal of :func:`evaluate_lockbox` on non-holdout months, before sealing.
+
+    The lockbox writes its report only at the end, so a failure part-way (memory, a bug at full
+    scale) would read the holdout and leave nothing. This runs the same window scoring on
+    Validation B, and the same cohort and run-off backtests for the cohort active before
+    Validation A with observation capped at the end of Validation B. It reports stage times and
+    peak RSS. No test month is read, and the output is not evidence of performance: Validation B
+    was already used for calibration.
+    """
+    from prepay.resources import peak_rss_bytes
+
+    run = load_run(run_dir)
+    if lock.fingerprint() != run.manifest["data_lock_fingerprint"]:
+        raise LockboxError("data lock differs from the one the run was trained on")
+    cutoff = periods.parse_iso(lock.performance_cutoff_month)
+    windows = {w.name: w for w in standard_windows(cutoff)}
+    selected_name = run.manifest["selection"]["selected"]
+    validation = read_json(run_dir / "validation.json")
+    credit = run.manifest.get("credit_sufficiency")
+    credit_validated = bool(credit and credit["credit_hazard_validated"])
+    window = windows["validation_b"]
+    t0, cap = windows["validation_a"].first - 1, window.last
+    stages: dict[str, dict[str, float]] = {}
+    clock = time.perf_counter()
+
+    def stage(name: str) -> None:
+        nonlocal clock
+        now = time.perf_counter()
+        stages[name] = {"seconds": round(now - clock, 1), "peak_rss_bytes": peak_rss_bytes()}
+        clock = now
+
+    con: duckdb.DuckDBPyConnection = duckdb.connect(str(warehouse_path(data_root)), read_only=True)
+    try:
+        batch = read_window(con, window)
+        stage("read_window")
+        window_result = _score_window(
+            batch, run, selected_name, validation[selected_name]["validation_b"], credit_validated
+        )
+        stage("score_window")
+        rows = batch.rows
+        del batch
+        history = rate_path_from_bronze(data_root / "bronze")
+        cohort_models = _cohort_models(run)
+        non_holdout = _NonHoldout()
+        cohort = cohort_backtest(
+            con, cohort_models, history, t0, seal=non_holdout, cutoff_month=cap
+        )
+        stage("cohort_backtest")
+        runoff = runoff_backtest(
+            con, cohort_models, history, t0, seal=non_holdout, cutoff_month=cap
+        )
+        stage("runoff_backtest")
+    finally:
+        con.close()
+    return {
+        "kind": "prepay-lockbox-rehearsal",
+        "note": "non-holdout dress rehearsal; Validation B is in-sample for calibration",
+        "run_id": run.manifest["run_id"],
+        "synthetic": run.manifest["synthetic"],
+        "window": window.label,
+        "rows": rows,
+        "stages": stages,
+        "peak_rss_bytes": peak_rss_bytes(),
+        "result": window_result,
+        "cohort_backtest": {periods.to_iso(t0): cohort},
+        "runoff_backtest": {periods.to_iso(t0): runoff},
+    }

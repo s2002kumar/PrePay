@@ -24,7 +24,14 @@ from prepay.finance import (
 from prepay.ingest.lock import DataLock
 from prepay.io import read_json
 from prepay.modeling import windows as windows_module
-from prepay.modeling.lockbox import LockboxError, SealError, evaluate_lockbox, load_seal, seal
+from prepay.modeling.lockbox import (
+    LockboxError,
+    SealError,
+    evaluate_lockbox,
+    load_seal,
+    rehearse_lockbox,
+    seal,
+)
 from prepay.modeling.registry import load_run
 from prepay.modeling.train import TrainingConfig, train
 from prepay.modeling.windows import HoldoutAccessError, read_window, standard_windows
@@ -183,6 +190,45 @@ def test_seal_and_one_shot_lockbox(
     _assert_adr_0006_sections(report)
     with pytest.raises(LockboxError, match="immutable"):
         evaluate_lockbox(run_dir, root, lock)
+
+
+def test_lockbox_rehearsal_reads_only_validation_months(
+    trained: tuple[Path, list[tuple[int, int]]], built: tuple[Path, DataLock], tmp_path: Path
+) -> None:
+    root, lock = built
+    run_dir = tmp_path / "run"
+    shutil.copytree(trained[0], run_dir)
+    requested: list[tuple[int, int]] = []
+    original = windows_module.read_panel
+
+    def spy(con: duckdb.DuckDBPyConnection, first: int, last: int, **kwargs: object) -> PanelBatch:
+        requested.append((first, last))
+        return original(con, first, last, **kwargs)  # type: ignore[arg-type]
+
+    windows_module.read_panel = spy  # type: ignore[assignment]
+    try:
+        report = rehearse_lockbox(run_dir, root, lock)
+    finally:
+        windows_module.read_panel = original
+    assert requested == [(periods.month(2019, 1), periods.month(2019, 12))]
+    assert set(report["stages"]) == {
+        "read_window",
+        "score_window",
+        "cohort_backtest",
+        "runoff_backtest",
+    }
+    assert {"B1_lookup", "B2_logistic", "M1_lightgbm", "selected", "_segments"} <= set(
+        report["result"]
+    )
+    (cohort,) = report["cohort_backtest"].values()
+    assert cohort["t0"] == "2017-12"
+    assert set(cohort["horizons"]) == {"6m", "12m", "24m"}  # all end by 2019-12
+    (runoff,) = report["runoff_backtest"].values()
+    assert runoff["horizon_months"] == 24
+    assert not (run_dir / "seal.json").exists()
+    other = dataclasses.replace(lock, terms_reference="different")
+    with pytest.raises(LockboxError, match="data lock"):
+        rehearse_lockbox(run_dir, root, other)
 
 
 def test_tampering_after_seal_is_detected(

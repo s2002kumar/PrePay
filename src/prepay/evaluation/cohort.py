@@ -64,10 +64,16 @@ class Cohort:
 def build_cohort(
     con: duckdb.DuckDBPyConnection, t0: int, horizon: int, loan_ids: np.ndarray
 ) -> Cohort:
-    """Eligible loans active at the end of ``t0`` and their realized timing within the horizon."""
+    """Eligible loans active at the end of ``t0`` and their realized timing within the horizon.
+
+    Outcomes after ``t0 + horizon`` are collapsed in SQL, so they are never fetched.
+    """
     rows = con.execute(
         """
-        select s.loan_id, e.event_type, e.event_month
+        select
+            s.loan_id,
+            case when e.event_month > $end then 'beyond_horizon' else e.event_type end,
+            least(e.event_month, $end + 1)
         from int_loan_month_state as s
         inner join int_exit_events as e on s.loan_id = e.loan_id
         where s.period_month = $t0
@@ -77,7 +83,7 @@ def build_cohort(
           and e.event_month > $t0
         order by s.loan_id
         """,
-        {"t0": t0},
+        {"t0": t0, "end": t0 + horizon},
     ).fetchall()
     position = {lid: i for i, lid in enumerate(loan_ids)}
     index, last, event = [], [], []

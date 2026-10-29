@@ -53,3 +53,43 @@ def test_empty_risk_set_keeps_curves_flat() -> None:
     curves = aalen_johansen(np.array([1]), np.array([EVENT_P]), 3)
     assert curves["prepay"].tolist() == pytest.approx([1.0, 1.0, 1.0])
     assert curves["at_risk"].tolist() == [1.0, 0.0, 0.0]
+
+
+def test_build_cohort_truncates_outcomes_at_the_horizon_in_sql() -> None:
+    import duckdb
+
+    from prepay.evaluation.cohort import build_cohort
+
+    t0, horizon = 100, 3
+    con = duckdb.connect()
+    con.execute(
+        "create table int_loan_month_state (loan_id varchar, period_month integer, "
+        "zero_balance_code varchar, current_upb double, modification_flag varchar)"
+    )
+    con.execute(
+        "create table int_exit_events (loan_id varchar, event_type varchar, event_month int)"
+    )
+    events = {
+        "a": ("prepay", t0 + 2),  # payoff inside the horizon
+        "b": ("prepay", t0 + 5),  # payoff after the horizon -> censored at the horizon
+        "c": ("credit", t0 + 3),  # credit exit in the last month
+        "d": ("censor_modification", t0 + 3),  # censored before its month
+        "e": ("censor_modification", t0 + 4),  # after the horizon -> censored at the horizon
+        "f": ("censor_administrative", t0 + 2),  # observed through its month
+    }
+    for loan_id, (event_type, month) in events.items():
+        con.execute(
+            "insert into int_loan_month_state values (?, ?, null, 1000.0, '')", [loan_id, t0]
+        )
+        con.execute("insert into int_exit_events values (?, ?, ?)", [loan_id, event_type, month])
+    cohort = build_cohort(con, t0, horizon, np.array(sorted(events), dtype=object))
+    timing = zip(cohort.last_month.tolist(), cohort.event.tolist(), strict=True)
+    got = dict(zip(cohort.loan_index.tolist(), timing, strict=True))
+    assert got == {
+        0: (2, EVENT_P),
+        1: (3, CENSORED),
+        2: (3, EVENT_C),
+        3: (2, CENSORED),
+        4: (3, CENSORED),
+        5: (2, CENSORED),
+    }
