@@ -68,8 +68,14 @@ def _release_dbt_resources() -> None:
     cleanup_event_logger()
 
 
-def run_dbt(data_root: Path, lock: DataLock, command: str = "build") -> None:
-    """Run ``dbt <command>`` (build = models + data tests) and raise on any failure."""
+def run_dbt(
+    data_root: Path, lock: DataLock, command: str = "build", *, memory_limit: str = "80%"
+) -> None:
+    """Run ``dbt <command>`` (build = models + data tests) and raise on any failure.
+
+    ``memory_limit`` is DuckDB's ``memory_limit`` (DuckDB's own default is 80% of RAM); larger
+    joins and windows spill to ``<warehouse>.tmp`` instead of exhausting memory.
+    """
     from dbt.cli.main import dbtRunner
 
     bronze = data_root / "bronze"
@@ -95,6 +101,7 @@ def run_dbt(data_root: Path, lock: DataLock, command: str = "build") -> None:
     environment = {
         "PREPAY_BRONZE": bronze.as_posix(),
         "PREPAY_WAREHOUSE": warehouse.as_posix(),
+        "PREPAY_DUCKDB_MEMORY_LIMIT": memory_limit,
         "DBT_SEND_ANONYMOUS_USAGE_STATS": "false",
     }
     with _environment(environment):

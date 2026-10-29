@@ -4,7 +4,11 @@ Public, non-sensitive summary. Status levels: `NOT BUILT` · `IMPLEMENTED-SYNTHE
 tested on synthetic data only) · `VALIDATED-REAL-PRIVATE` (run privately on lawfully obtained
 Freddie Mac files) · `PUBLIC-DEPLOYED` · `BLOCKED`. A green CI run is never a real-data claim.
 
-Last updated: 2026-10-28.
+Last updated: 2026-10-29.
+
+`VALIDATED-REAL-PRIVATE` means the stage was run and checked on the real files privately. It
+records that the check ran, not that every result was favourable. Real-data outcomes, including
+failed checks, are in the private review packet.
 
 ## Blockers (owner action required)
 
@@ -22,30 +26,47 @@ derived tables, trained models and real-data results never enter this repository
 The study follows a pre-registered plan (ADR 0006). Its review packet is kept privately. Until the
 owner completes a terms review, this file records only process status, never real-data numbers.
 
+| Stage (ADR 0006) | Status | Date |
+|---|---|---|
+| Source verification: Release 48 layout, cutoff, archive integrity, data lock | done | 2026-10-28 |
+| Full ingest and dbt build at sample scale; profile; rebuild determinism | done; real data exposed one non-deterministic mart, now fixed | 2026-10-28 |
+| Independent label audit and feature parity | done; real data exposed one label bug (ADR 0003 amendment 1), now fixed and re-audited | 2026-10-28 |
+| Training and validation-only selection (ADR 0004), reduced training fraction for memory (ADR 0006 §5) | done | 2026-10-29 |
+| B1 incentive diagnosis on training and validation data (ADR 0007) | done before the seal | 2026-10-29 |
+| Lockbox dress rehearsal on non-holdout data | done | 2026-10-29 |
+| Seal, then the single lockbox opening (primary + pre-registered secondary analyses) | done, once | 2026-10-29 |
+| Private review packet: verified evidence, failed checks, limitations, recommendations | written | 2026-10-29 |
+| Independent review of the study | not done | — |
+
+Not every pre-registered holdout check passed. The failures are reported in the private packet,
+not repaired, and the sealed result is unchanged. Any revised model would be a separate experiment
+evaluated only on reporting months after the Release 48 cutoff (ADR 0006 §11, ADR 0007, and the
+proposed experiment in ADR 0008).
+
 ## Acceptance gates (SPEC §4)
 
 | ID | Gate | Status | Evidence | Known gaps |
 |---|---|---|---|---|
-| P1 | Source schema + provenance | IMPLEMENTED-SYNTHETIC | `src/prepay/contracts/`, `src/prepay/ingest/`, ADR 0002, `tests/integration/test_ingest.py` | Layout header-verified against official files; data lock + checksums + byte-exact bronze lineage; pre-R47 fallback BLOCKED (no official layout artifact); real-file verification BLOCKED on data |
-| P2 | Deterministic, idempotent pipelines | IMPLEMENTED-SYNTHETIC (ingest) | `test_rerun_reuses_outputs_and_detects_tampering`; byte-identical bronze on rerun | dbt/model stages not built yet |
-| P3 | Point-in-time 3-state targets | IMPLEMENTED-SYNTHETIC | `transform/`, ADR 0003, `tests/integration/test_transform.py` (SQL = independent Python oracle; features reproduce generator truth < 1e-9; leakage/chronology guards proven to fail on corrupted data) | Real-data counts for date-mismatch and unexplained-end rules pending data |
-| P4 | Reproducible trained models | IMPLEMENTED-SYNTHETIC | `src/prepay/modeling/`, ADR 0004, `tests/unit/test_models.py`, `tests/integration/test_modeling.py` | B0/B1/B2/M1 + calibration + run registry with digests on synthetic data only; drift (PSI), seed repeats, ablations and segment reports not built |
-| P5 | Sealed future holdouts | IMPLEMENTED-SYNTHETIC (mechanism) | seal + one-shot lockbox; holdout guard tested with a reader spy; tamper and second-evaluation refusals tested | Real holdout evaluation BLOCKED on data |
+| P1 | Source schema + provenance | VALIDATED-REAL-PRIVATE | `src/prepay/contracts/`, `src/prepay/ingest/`, ADR 0002, `tests/integration/test_ingest.py`; Release 48 sample ingested privately 2026-10-28 | Freddie Mac publishes no archive checksums (integrity rests on ZIP CRCs, the data lock and layout checks); terms acceptance date to be recorded by the owner; pre-R47 fallback BLOCKED (no official layout artifact) |
+| P2 | Deterministic, idempotent pipelines | VALIDATED-REAL-PRIVATE | Byte-identical bronze on rerun; `prepay fingerprint` (order-independent table hashes) with `tests/integration/test_audit.py`; two private full rebuilds compared | Timings on a shared laptop are upper bounds, not benchmarks |
+| P3 | Point-in-time 3-state targets | VALIDATED-REAL-PRIVATE | `transform/`, ADR 0003 (+ amendment 1), `tests/integration/test_transform.py`; `prepay audit` (independent oracle vs dbt, feature parity) run privately | Oracle and SQL share one author (agent); a human spot-check of event labels is still needed |
+| P4 | Reproducible trained models | VALIDATED-REAL-PRIVATE | `src/prepay/modeling/`, ADR 0004/0006, `tests/unit/test_models.py`, `tests/integration/test_modeling.py`; real run manifest records data, feature, software and Git digests | Reduced training fraction (memory rule, ADR 0006 §5); drift (PSI), seed repeats and ablations not built |
+| P5 | Sealed future holdouts | VALIDATED-REAL-PRIVATE | seal + one-shot lockbox (tests: reader spy, tamper, second-evaluation refusal); real run sealed and opened once, 2026-10-29 | Not every pre-registered check passed (private packet). The test windows are now opened; a forward-evaluation path for later releases is not built |
 | P6 | Cash-flow conventions + conservation | IMPLEMENTED-SYNTHETIC | `make test-finance`; ADR 0001; `docs/validation/FINANCE_ENGINE.md`; all twelve §6 items tested | Event-timing sensitivity not yet published |
-| P7 | Pooled 12/24m backtests | IMPLEMENTED-SYNTHETIC | `src/prepay/evaluation/cohort.py` inside the lockbox; `docs/VALIDATION_REPORT.md` §5 | Real cohorts BLOCKED on data; count-weighted estimand; censoring assumed non-informative by the estimator |
+| P7 | Pooled 12/24m backtests | VALIDATED-REAL-PRIVATE | `src/prepay/evaluation/cohort.py` (incidence + censoring bounds) and `runoff.py` (balance run-off) inside the lockbox; synthetic results in `docs/VALIDATION_REPORT.md` §5 | Real cohort and run-off results private; curtailments not modelled; interest, losses and recoveries not compared (no cash data) |
 | P8 | Interactive demo | IMPLEMENTED-SYNTHETIC (local + Docker) | `src/prepay/api/`, `web/`, ADR 0005; CI `e2e` job (Playwright + axe, 17 tests), `tests/integration/test_api.py` | Hosted deploy BLOCKED on hosting approval |
 | P9 | Licensed-data boundary | IMPLEMENTED-SYNTHETIC | `prepay publication-check` (tracked set in `make check`; history + build outputs in CI `e2e`); synthetic-only bundle loader; allowlist `.dockerignore` | Manual license review needed before any real-data publication |
-| P10 | README, reports, reproducible install | IMPLEMENTED-SYNTHETIC | README, VALIDATION_REPORT (real section BLOCKED), BENCHMARKS, review packets M2/M4/M5, Dockerfile | Clean-clone reproduction recorded in `docs/reviews/M5.md`; real results BLOCKED |
+| P10 | README, reports, reproducible install | IMPLEMENTED-SYNTHETIC | README, VALIDATION_REPORT, BENCHMARKS, review packets M2/M4/M5, Dockerfile; clean clone of `main` `f8ac9e2` in WSL2 Ubuntu: `make check` 275 passed, `make test-finance` 85 passed (95.60% finance coverage), 2026-10-28 | Real-data results private pending terms review |
 
 ## Milestones
 
 | Milestone | Status | Notes |
 |---|---|---|
 | M0 Foundations | IMPLEMENTED-SYNTHETIC | Includes the CI end-to-end path: synthetic ingest → dbt → trained model → finance projection (`test_end_to_end_model_hazards_drive_a_conserving_projection`) |
-| M1 Ingest + provenance | IMPLEMENTED-SYNTHETIC | Streaming ZIP to bronze Parquet, data lock, FRED PMMS ingest + local fetch, per-field violation counts; real-data run BLOCKED on data |
+| M1 Ingest + provenance | VALIDATED-REAL-PRIVATE | Streaming ZIP to bronze Parquet, data lock, FRED PMMS ingest + local fetch, per-field violation counts; release-cutoff check; run privately on the Release 48 sample |
 | M2 Feature store | IMPLEMENTED-SYNTHETIC | dbt silver/gold + Python scenario feature state machine with exact historical parity; benchmark baseline in `docs/BENCHMARKS.md`; reviewer packet `docs/reviews/M2.md` |
-| M3 ML | IMPLEMENTED-SYNTHETIC | Models, validation-only selection, cross-fitted calibration, seal/lockbox; trained only on synthetic data; real training BLOCKED on data |
-| M4 Finance engine + freeze | IMPLEMENTED-SYNTHETIC | Engine, scenarios, pools, projection, seal/lockbox with cohort backtests; reviewer packet `docs/reviews/M4.md`; real freeze/holdout BLOCKED on data |
+| M3 ML | VALIDATED-REAL-PRIVATE | Models, validation-only selection, cross-fitted calibration, seal/lockbox, segment reports; trained, sealed and opened once on real data privately; results unpublished |
+| M4 Finance engine + freeze | IMPLEMENTED-SYNTHETIC (engine) · VALIDATED-REAL-PRIVATE (freeze, run-off backtest) | Engine, scenarios, pools, projection; reviewer packet `docs/reviews/M4.md`; real freeze and run-off comparison done privately; engine outputs on real loans are not published |
 | M5 Product + publication | IMPLEMENTED-SYNTHETIC | API, web UI, publication gate, Docker image, security policy; reviewer packet `docs/reviews/M5.md`; hosted deploy BLOCKED on approval |
 
 ## Finance verification detail (FINANCIAL_CONVENTIONS §6)

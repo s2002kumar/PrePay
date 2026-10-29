@@ -40,7 +40,12 @@ perf_loans as (
             zero_balance_code is not null
             and zero_balance_effective_month is distinct from period_month
         ) as zero_balance_date_mismatch,
-        arg_min(modification_flag, period_month) as first_row_modification_flag
+        -- arg_min_null: the flag on the first observed row even when it is blank (arg_min would
+        -- skip blank flags and return the first non-blank one from a later month).
+        arg_min_null(modification_flag, period_month) as first_row_modification_flag,
+        min(period_month) as first_observed_month,
+        min(period_month) filter (where modification_flag = 'Y') as first_y_month,
+        min(period_month) filter (where modification_flag = 'P') as first_p_month
     from performance
     group by loan_id
 ),
@@ -111,6 +116,13 @@ combined as (
         coalesce(p.terminal_rows, 0) > 1 as multiple_terminal_rows,
         coalesce(p.zero_balance_date_mismatch, false) as zero_balance_date_mismatch,
         coalesce(p.first_row_modification_flag = 'P', false) as modified_before_entry,
+        -- 'P' (prior modification) after entry with no earlier 'Y': the modification month is
+        -- unknown, so the loan's censoring time can't be placed.
+        coalesce(
+            p.first_p_month > p.first_observed_month
+            and (p.first_y_month is null or p.first_p_month < p.first_y_month),
+            false
+        ) as prior_modification_without_y,
         coalesce(o.ineligible_product, false) as ineligible_product
     from orig_loans as o
     full outer join perf_loans as p on o.loan_id = p.loan_id
@@ -124,6 +136,7 @@ select
     orphan_performance or no_performance or duplicate_origination or field_domain_violation
     or missing_required_field or conflicting_duplicate_period or period_gap
     or rows_after_termination or modification_with_terminal_same_month
-    or missing_zero_balance_effective_date or multiple_terminal_rows as is_quarantined,
+    or missing_zero_balance_effective_date or multiple_terminal_rows
+    or prior_modification_without_y as is_quarantined,
     modified_before_entry or ineligible_product as is_excluded
 from combined

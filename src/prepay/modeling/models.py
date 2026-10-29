@@ -49,11 +49,27 @@ def softmax(z: FloatArray) -> FloatArray:
     return np.asarray(e / e.sum(axis=1, keepdims=True), dtype=np.float64)
 
 
+#: Rows scored per block. Bounds the transient memory of design matrices (B2) and LightGBM input
+#: when whole holdout windows (millions of rows) are scored.
+PREDICT_BLOCK_ROWS = 1 << 19
+
+
 class HazardModel(ABC):
     family: ClassVar[str]
 
+    def predict_proba(self, batch: PanelBatch) -> FloatArray:
+        """Month-t class probabilities, scored in row blocks of bounded memory."""
+        if batch.rows <= PREDICT_BLOCK_ROWS:
+            return self._predict_block(batch)
+        return np.concatenate(
+            [
+                self._predict_block(batch.slice(start, start + PREDICT_BLOCK_ROWS))
+                for start in range(0, batch.rows, PREDICT_BLOCK_ROWS)
+            ]
+        )
+
     @abstractmethod
-    def predict_proba(self, batch: PanelBatch) -> FloatArray: ...
+    def _predict_block(self, batch: PanelBatch) -> FloatArray: ...
 
     @abstractmethod
     def to_json(self) -> dict[str, Any]: ...
@@ -76,7 +92,7 @@ class PsaBaseline(HazardModel):
     def fit(cls, batch: PanelBatch) -> PsaBaseline:
         return cls(credit_rate=float(np.mean(batch.outcome_class == 2)))
 
-    def predict_proba(self, batch: PanelBatch) -> FloatArray:
+    def _predict_block(self, batch: PanelBatch) -> FloatArray:
         age = np.maximum(np.asarray(batch.features["loan_age"], dtype=np.float64), 0.0)
         prepay = psa_smm(age, self.speed)
         credit = np.full(prepay.shape, self.credit_rate)
@@ -127,7 +143,7 @@ class LookupBaseline(HazardModel):
             table=smoothed.tolist(), marginal=marginal.tolist(), prior_strength=prior_strength
         )
 
-    def predict_proba(self, batch: PanelBatch) -> FloatArray:
+    def _predict_block(self, batch: PanelBatch) -> FloatArray:
         return check_simplex(np.asarray(self.table)[self._cells(batch)])
 
     def to_json(self) -> dict[str, Any]:
@@ -162,7 +178,7 @@ class LogisticModel(HazardModel):
         model.fit(pre.dense(batch), batch.outcome_class)
         return cls(pre, model.coef_.tolist(), model.intercept_.tolist(), c_regularization)
 
-    def predict_proba(self, batch: PanelBatch) -> FloatArray:
+    def _predict_block(self, batch: PanelBatch) -> FloatArray:
         z = self.preprocessor.dense(batch) @ np.asarray(self.coef).T + np.asarray(self.intercept)
         return check_simplex(softmax(z))
 
@@ -249,7 +265,7 @@ class GbmModel(HazardModel):
             self._booster = lgb.Booster(model_str=self.booster_text)
         return self._booster
 
-    def predict_proba(self, batch: PanelBatch) -> FloatArray:
+    def _predict_block(self, batch: PanelBatch) -> FloatArray:
         raw = self._model().predict(self.preprocessor.tree_matrix(batch))
         return check_simplex(np.asarray(raw, dtype=np.float64))
 
@@ -275,7 +291,7 @@ class TemperatureCalibrated(HazardModel):
 
     family: ClassVar[str] = "temperature"
 
-    def predict_proba(self, batch: PanelBatch) -> FloatArray:
+    def _predict_block(self, batch: PanelBatch) -> FloatArray:
         return check_simplex(apply_temperature(self.base.predict_proba(batch), self.temperature))
 
     def to_json(self) -> dict[str, Any]:

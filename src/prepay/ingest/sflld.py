@@ -4,7 +4,8 @@ Bronze preserves every field exactly as received (strings), plus ``_source_file`
 ``_source_row`` (1-based line number in the member) and ``_violations`` (bit ``k-1`` set when
 field ``k`` breaks its documented domain). Nothing is typed, imputed or dropped here.
 Field-domain violations are *counted* for the quality report; loan-level quarantine decisions are
-made downstream in dbt.
+made downstream in dbt. Each member's valid period range is recorded, and a performance record dated
+after the locked release's cutoff stops the run: such a file cannot belong to that release.
 
 A vintage's outputs are reused when its input fingerprint (archive SHA-256, layout fingerprints,
 ingest version, malformed-row policy) is unchanged and the recorded output hashes still match.
@@ -25,6 +26,7 @@ from typing import Any
 
 import numpy as np
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.csv as pacsv
 import pyarrow.parquet as pq
 
@@ -36,9 +38,11 @@ from prepay.io import atomic_path, read_json, sha256_file, write_json_atomic
 
 log = logging.getLogger(__name__)
 
-INGEST_VERSION = "2"  # 2: adds the _violations bitmask column
+INGEST_VERSION = "3"  # 2: _violations bitmask column; 3: period ranges and cutoff check
 BLOCK_BYTES = 8 << 20
 MAX_REPORTED_LINES = 20
+#: The YYYYMM field whose valid range each member reports.
+PERIOD_FIELD = {"origination": "first_payment_date", "performance": "period"}
 
 
 class IngestError(RuntimeError):
@@ -53,6 +57,8 @@ class MemberStats:
     malformed_rows: int = 0
     malformed_lines: list[int] = field(default_factory=list)  # first few, line numbers only
     violations: dict[str, int] = field(default_factory=dict)
+    period_min: str | None = None  # YYYYMM over valid, non-blank values of PERIOD_FIELD
+    period_max: str | None = None
     output: str = ""
     output_sha256: str = ""
 
@@ -95,6 +101,7 @@ def stream_member(
     """Parse one headerless member into a bronze Parquet file in bounded memory."""
     stats = MemberStats(member=member, file_kind=layout.file_kind)
     stats.violations = dict.fromkeys(layout.column_names, 0)
+    period_name = PERIOD_FIELD[layout.file_kind]
     malformed: list[int] = []
 
     def on_invalid(row: Any) -> str:
@@ -131,6 +138,8 @@ def stream_member(
                     )
                     stats.violations[spec.name] += int(bad.sum())
                     bitmask |= bad.astype(np.int64) << (spec.position - 1)
+                    if spec.name == period_name:
+                        _update_period_range(stats, batch.column(spec.name), bad)
                 columns = [batch.column(n) for n in layout.column_names]
                 columns += [
                     pa.array([member] * count, pa.string()),
@@ -148,6 +157,17 @@ def stream_member(
     stats.malformed_rows = len(malformed)
     stats.malformed_lines = malformed[:MAX_REPORTED_LINES]
     return stats
+
+
+def _update_period_range(stats: MemberStats, values: pa.Array, bad: np.ndarray) -> None:
+    keep = pc.and_(pa.array(~bad), pc.not_equal(values, ""))
+    extremes = pc.min_max(pc.filter(values, keep)).as_py()
+    if extremes["min"] is None:
+        return
+    if stats.period_min is None or extremes["min"] < stats.period_min:
+        stats.period_min = extremes["min"]
+    if stats.period_max is None or extremes["max"] > stats.period_max:
+        stats.period_max = extremes["max"]
 
 
 def _reusable(manifest_path: Path, fingerprint: str) -> dict[str, Any] | None:
@@ -182,6 +202,7 @@ def ingest_archive(
     if sha256_file(archive_path) != locked.sha256:
         raise IngestError(f"{locked.path}: SHA-256 differs from data lock; refusing to ingest")
     origination, performance = layouts_for_release(lock.release)
+    cutoff = lock.performance_cutoff_month.replace("-", "")
     expected = list(sample_members(vintage))
     try:
         archive = zipfile.ZipFile(archive_path)
@@ -207,6 +228,12 @@ def ingest_archive(
         ):
             with atomic_path(out_dir / output) as tmp:
                 stats = stream_member(archive, member, layout, tmp, allow_malformed=allow_malformed)
+                if layout.file_kind == "performance" and (stats.period_max or "") > cutoff:
+                    raise IngestError(
+                        f"{locked.path}: {member} reports periods up to {stats.period_max}, after "
+                        f"the Release {lock.release} performance cutoff {cutoff}; the archive does "
+                        "not belong to the locked release"
+                    )
             stats.output = output
             stats.output_sha256 = sha256_file(out_dir / output)
             members.append(stats)

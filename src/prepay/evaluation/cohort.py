@@ -64,10 +64,16 @@ class Cohort:
 def build_cohort(
     con: duckdb.DuckDBPyConnection, t0: int, horizon: int, loan_ids: np.ndarray
 ) -> Cohort:
-    """Eligible loans active at the end of ``t0`` and their realized timing within the horizon."""
+    """Eligible loans active at the end of ``t0`` and their realized timing within the horizon.
+
+    Outcomes after ``t0 + horizon`` are collapsed in SQL, so they are never fetched.
+    """
     rows = con.execute(
         """
-        select s.loan_id, e.event_type, e.event_month
+        select
+            s.loan_id,
+            case when e.event_month > $end then 'beyond_horizon' else e.event_type end,
+            least(e.event_month, $end + 1)
         from int_loan_month_state as s
         inner join int_exit_events as e on s.loan_id = e.loan_id
         where s.period_month = $t0
@@ -77,7 +83,7 @@ def build_cohort(
           and e.event_month > $t0
         order by s.loan_id
         """,
-        {"t0": t0},
+        {"t0": t0, "end": t0 + horizon},
     ).fetchall()
     position = {lid: i for i, lid in enumerate(loan_ids)}
     index, last, event = [], [], []
@@ -137,30 +143,112 @@ def aalen_johansen(last: IntArray, event: IntArray, horizon: int) -> dict[str, F
     return {name: np.asarray(values) for name, values in curves.items()}
 
 
-def model_incidence(
-    model: Predictor, statics: LoanStatics, cohort: Cohort, rates: RatePath, horizon: int
-) -> dict[str, FloatArray]:
-    """Mean model-implied cumulative incidence over the cohort (count-weighted)."""
-    n = cohort.size
-    loan_index = np.repeat(cohort.loan_index, horizon)
-    target = np.tile(np.arange(cohort.t0 + 1, cohort.t0 + horizon + 1), n)
-    features = compute_features(statics, rates, loan_index, target)
-    batch = PanelBatch(
-        loan_id=loan_index.astype(object),
-        target_month=target,
-        outcome_class=np.zeros(target.size, dtype=np.int64),
-        exposure_upb=np.zeros(target.size),
-        features=features,
-    )
-    p = np.asarray(model.predict_proba(batch)).reshape(n, horizon, 3)
-    maturity = statics.maturity_month[cohort.loan_index] - cohort.t0  # month k of final payment
+#: Loans whose features are built and scored together; bounds memory for large real cohorts.
+CHUNK_LOANS = 20_000
+
+
+def model_hazards(
+    model: Predictor,
+    statics: LoanStatics,
+    loan_index: IntArray,
+    t0: int,
+    rates: RatePath,
+    horizon: int,
+    *,
+    chunk_loans: int = CHUNK_LOANS,
+) -> FloatArray:
+    """Month ``t0+k`` class probabilities for each loan, ``(n, horizon, 3)``, scored in chunks."""
+    n = int(loan_index.shape[0])
+    out = np.empty((n, horizon, 3))
+    months = np.arange(t0 + 1, t0 + horizon + 1)
+    for start in range(0, n, chunk_loans):
+        part = loan_index[start : start + chunk_loans]
+        rows = np.repeat(part, horizon)
+        target = np.tile(months, part.shape[0])
+        batch = PanelBatch(
+            loan_id=rows.astype(object),
+            target_month=target,
+            outcome_class=np.zeros(target.size, dtype=np.int64),
+            exposure_upb=np.zeros(target.size),
+            features=compute_features(statics, rates, rows, target),
+            loan_code=rows,
+        )
+        p = np.asarray(model.predict_proba(batch))
+        out[start : start + part.shape[0]] = p.reshape(part.shape[0], horizon, 3)
+    return out
+
+
+def survival_before(
+    statics: LoanStatics, loan_index: IntArray, t0: int, p: FloatArray
+) -> FloatArray:
+    """``S(k-1)``: probability of being active at the start of month ``t0+k``, ``(n, horizon)``.
+
+    The final contractual payment month ends the loan (maturity), whatever the hazards say.
+    """
+    n, horizon = p.shape[0], p.shape[1]
+    maturity = statics.maturity_month[loan_index] - t0  # month k of final payment
     months = np.arange(1, horizon + 1)
     alive_before = np.ones((n, horizon))
     survive = np.where(months[None, :] < maturity[:, None], p[:, :, 0], 0.0)
     alive_before[:, 1:] = np.cumprod(survive, axis=1)[:, :-1]
+    return alive_before
+
+
+def model_incidence(
+    model: Predictor, statics: LoanStatics, cohort: Cohort, rates: RatePath, horizon: int
+) -> dict[str, FloatArray]:
+    """Mean model-implied cumulative incidence over the cohort (count-weighted)."""
+    p = model_hazards(model, statics, cohort.loan_index, cohort.t0, rates, horizon)
+    alive_before = survival_before(statics, cohort.loan_index, cohort.t0, p)
     return {
         "prepay": (alive_before * p[:, :, 1]).cumsum(axis=1).mean(axis=0),
         "credit": (alive_before * p[:, :, 2]).cumsum(axis=1).mean(axis=0),
+    }
+
+
+def censoring_sensitivity(
+    cohort: Cohort, horizon: int, statics: LoanStatics, history: RatePath
+) -> dict[str, Any]:
+    """ADR 0006 §10: payoff incidence bounds under extreme assumptions about censored loans.
+
+    Lower bound: every loan censored inside the horizon stays active, without payoff, to the
+    horizon. Upper bound: every such loan pays off in its censoring month. Also compares censored
+    and other loans on characteristics known at ``t0``.
+    """
+    censored = (cohort.event == CENSORED) & (cohort.last_month < horizon)
+    never_last = np.where(censored, horizon, cohort.last_month)
+    all_last = np.where(censored, cohort.last_month + 1, cohort.last_month)
+    all_event = np.where(censored, EVENT_P, cohort.event)
+    estimate = aalen_johansen(cohort.last_month, cohort.event, horizon)["prepay"][-1]
+    low = aalen_johansen(never_last, cohort.event, horizon)["prepay"][-1]
+    high = aalen_johansen(all_last, all_event, horizon)["prepay"][-1]
+    features = compute_features(
+        statics, history, cohort.loan_index, np.full(cohort.size, cohort.t0 + 1)
+    )
+
+    def profile(mask: np.ndarray) -> dict[str, float | int | None]:
+        def mean(name: str) -> float | None:
+            values = np.asarray(features[name], dtype=np.float64)[mask]
+            values = values[np.isfinite(values)]
+            return float(values.mean()) if values.size else None
+
+        return {
+            "loans": int(mask.sum()),
+            "mean_credit_score": mean("credit_score"),
+            "mean_original_ltv": mean("original_ltv"),
+            "mean_incentive_bps_at_t0": mean("incentive_bps"),
+        }
+
+    return {
+        "horizon_months": horizon,
+        "censored_share": float(censored.mean()),
+        "prepay_incidence": {
+            "aalen_johansen": float(estimate),
+            "bound_censored_never_pay_off": float(low),
+            "bound_censored_all_pay_off": float(high),
+        },
+        "censored_profile": profile(censored),
+        "uncensored_profile": profile(~censored),
     }
 
 
@@ -249,4 +337,5 @@ def backtest(
         "cohort_loans": cohort.size,
         "estimand": "count-weighted cumulative incidence of full voluntary payoff",
         "horizons": by_horizon,
+        "censoring_sensitivity": censoring_sensitivity(cohort, horizon, statics, history),
     }

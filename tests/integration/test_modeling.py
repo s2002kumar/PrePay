@@ -24,7 +24,14 @@ from prepay.finance import (
 from prepay.ingest.lock import DataLock
 from prepay.io import read_json
 from prepay.modeling import windows as windows_module
-from prepay.modeling.lockbox import LockboxError, SealError, evaluate_lockbox, load_seal, seal
+from prepay.modeling.lockbox import (
+    LockboxError,
+    SealError,
+    evaluate_lockbox,
+    load_seal,
+    rehearse_lockbox,
+    seal,
+)
 from prepay.modeling.registry import load_run
 from prepay.modeling.train import TrainingConfig, train
 from prepay.modeling.windows import HoldoutAccessError, read_window, standard_windows
@@ -106,6 +113,45 @@ def test_test_windows_require_a_seal(built: tuple[Path, DataLock]) -> None:
         read_window(con, test_a)
 
 
+def _assert_adr_0006_sections(report: dict) -> None:
+    """Segment tables, credit gating and balance run-off are present and internally consistent."""
+    from prepay.evaluation.segments import DIMENSIONS
+
+    credit = report["credit_sufficiency"]
+    assert set(credit["credit_events"]) == {"train", "validation_a", "validation_b"}
+    for result in report["results"].values():
+        assert set(result["_segments"]["dimensions"]) == {d.name for d in DIMENSIONS}
+        interpretable = result["_credit"]["metrics_interpretable"]
+        assert interpretable == (
+            credit["credit_hazard_validated"] and result["_credit"]["credit_events"] >= 100
+        )
+        rows = sum(
+            cell["rows"]
+            for cell in result["_segments"]["dimensions"]["loan_age_months"].values()
+            if "rows" in cell
+        )
+        assert rows <= result["selected"]["rows"]
+    runoff = report["runoff_backtests"]
+    assert set(runoff) == {"2019-12", "2021-12", "2023-12"}
+    for entry in runoff.values():
+        assert entry["observation_gaps_loan_months"] == 0
+        observed = entry["observed"]
+        factor = observed["pool_factor"]["24m"]
+        interval = observed["pool_factor_interval_at_horizon"]
+        assert 0.0 < factor <= 1.0
+        assert interval["low"] <= factor <= interval["high"]
+        parts = observed["cumulative_principal_fraction"]
+        returned = sum(parts[p]["24m"] for p in ("payoff", "credit_exit", "amortization"))
+        assert returned == pytest.approx(1.0 - factor, abs=1e-9)  # observed balance telescopes
+        for modes in entry["models"].values():
+            for result in modes.values():
+                projected = result["pool_factor"]["24m"]
+                parts = result["cumulative_principal_fraction"]
+                returned = sum(parts[p]["24m"] for p in ("payoff", "credit_exit", "amortization"))
+                assert returned == pytest.approx(1.0 - projected, abs=1e-9)
+                assert 0.0 < result["wal_truncated_years"] <= 2.0
+
+
 def test_seal_and_one_shot_lockbox(
     trained: tuple[Path, list[tuple[int, int]]], built: tuple[Path, DataLock], tmp_path: Path
 ) -> None:
@@ -135,8 +181,54 @@ def test_seal_and_one_shot_lockbox(
             )
             assert low <= entry["realized_aalen_johansen_prepay"] <= high
             assert set(entry["models"]["selected"]) == {"hindsight_rates", "as_of_flat_rates"}
+        bounds = cohort["censoring_sensitivity"]["prepay_incidence"]
+        assert (
+            bounds["bound_censored_never_pay_off"]
+            <= bounds["aalen_johansen"]
+            <= bounds["bound_censored_all_pay_off"]
+        )
+    _assert_adr_0006_sections(report)
     with pytest.raises(LockboxError, match="immutable"):
         evaluate_lockbox(run_dir, root, lock)
+
+
+def test_lockbox_rehearsal_reads_only_validation_months(
+    trained: tuple[Path, list[tuple[int, int]]], built: tuple[Path, DataLock], tmp_path: Path
+) -> None:
+    root, lock = built
+    run_dir = tmp_path / "run"
+    shutil.copytree(trained[0], run_dir)
+    requested: list[tuple[int, int]] = []
+    original = windows_module.read_panel
+
+    def spy(con: duckdb.DuckDBPyConnection, first: int, last: int, **kwargs: object) -> PanelBatch:
+        requested.append((first, last))
+        return original(con, first, last, **kwargs)  # type: ignore[arg-type]
+
+    windows_module.read_panel = spy  # type: ignore[assignment]
+    try:
+        report = rehearse_lockbox(run_dir, root, lock)
+    finally:
+        windows_module.read_panel = original
+    assert requested == [(periods.month(2019, 1), periods.month(2019, 12))]
+    assert set(report["stages"]) == {
+        "read_window",
+        "score_window",
+        "cohort_backtest",
+        "runoff_backtest",
+    }
+    assert {"B1_lookup", "B2_logistic", "M1_lightgbm", "selected", "_segments"} <= set(
+        report["result"]
+    )
+    (cohort,) = report["cohort_backtest"].values()
+    assert cohort["t0"] == "2017-12"
+    assert set(cohort["horizons"]) == {"6m", "12m", "24m"}  # all end by 2019-12
+    (runoff,) = report["runoff_backtest"].values()
+    assert runoff["horizon_months"] == 24
+    assert not (run_dir / "seal.json").exists()
+    other = dataclasses.replace(lock, terms_reference="different")
+    with pytest.raises(LockboxError, match="data lock"):
+        rehearse_lockbox(run_dir, root, other)
 
 
 def test_tampering_after_seal_is_detected(

@@ -100,6 +100,37 @@ def test_every_model_is_coherent_and_round_trips(
     np.testing.assert_array_equal(clone.predict_proba(valid), gbm.predict_proba(valid))
 
 
+def test_block_scoring_equals_a_single_pass(
+    batches: tuple[PanelBatch, PanelBatch], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    train, valid = batches
+    pre = Preprocessor.fit(train)
+    models = [
+        PsaBaseline.fit(train),
+        LookupBaseline.fit(train),
+        LogisticModel.fit(train, pre, c_regularization=1.0),
+        GbmModel.fit(train, valid, pre, num_leaves=7, max_rounds=30),
+    ]
+    whole = [m.predict_proba(valid) for m in models]
+    monkeypatch.setattr("prepay.modeling.models.PREDICT_BLOCK_ROWS", 997)  # ragged last block
+    for model, expected in zip(models, whole, strict=True):
+        np.testing.assert_array_equal(model.predict_proba(valid), expected)
+
+
+def test_batch_slices_are_views_and_clusters_follow_loans(
+    batches: tuple[PanelBatch, PanelBatch],
+) -> None:
+    _, valid = batches
+    part = valid.slice(100, 250)
+    assert part.rows == 150
+    assert np.shares_memory(part.features["loan_age"], valid.features["loan_age"])
+    codes = part.clusters()
+    assert codes.min() == 0
+    assert codes.max() == len(set(part.loan_id)) - 1
+    same = part.loan_id[:, None] == part.loan_id[None, :]
+    np.testing.assert_array_equal(codes[:, None] == codes[None, :], same)
+
+
 def test_numpy_logistic_inference_equals_sklearn(batches: tuple[PanelBatch, PanelBatch]) -> None:
     from sklearn.linear_model import LogisticRegression
 

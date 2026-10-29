@@ -43,6 +43,7 @@ def test_bronze_preserves_every_field_with_exact_lineage(
     lock = lock_for(raw, tiny_dataset)
     summary = ingest_all(raw, lock, tmp_path / "bronze")
     assert summary["synthetic"] is True
+    assert summary["latest_reporting_period"] == "202606"
     manifest = json.loads((tiny_dataset / "manifest.json").read_text(encoding="utf-8"))
     con = duckdb.connect()
     for entry in manifest["vintages"]:
@@ -166,6 +167,33 @@ def test_pre_release_47_width_is_rejected(raw: Path, tiny_dataset: Path, tmp_pat
     _rewrite_member(archive, "sample_orig_2018.txt", lambda lines: [ln + "|7" for ln in lines])
     with pytest.raises(IngestError, match="31 fields"):
         ingest_all(raw, lock_for(raw, tiny_dataset), tmp_path / "bronze")
+
+
+def test_records_after_the_release_cutoff_are_refused(raw: Path, tmp_path: Path) -> None:
+    # Release 47's cutoff is 2026-03; files reporting through 2026-06 can't belong to it.
+    lock = create_lock(raw, release=47, terms_reference="test only")
+    with pytest.raises(IngestError, match="after the Release 47 performance cutoff 202603"):
+        ingest_all(raw, lock, tmp_path / "bronze")
+
+
+def test_data_ending_before_the_cutoff_is_refused_unless_allowed(
+    raw: Path, tiny_dataset: Path, tmp_path: Path
+) -> None:
+    # Release 48 data truncated at 2026-03 is what a mislabeled Release 47 download looks like.
+    for archive in sorted((raw / "sflld").glob("sample_*.zip")):
+        vintage = archive.stem.removeprefix("sample_")
+        _rewrite_member(
+            archive,
+            f"sample_perf_{vintage}.txt",
+            lambda lines: [ln for ln in lines if ln.split("|")[1] <= "202603"],
+        )
+    lock = lock_for(raw, tiny_dataset)
+    with pytest.raises(IngestError, match="latest reporting period 202603 differs"):
+        ingest_all(raw, lock, tmp_path / "strict")
+    summary = ingest_all(raw, lock, tmp_path / "lenient", allow_early_end=True)
+    assert summary["latest_reporting_period"] == "202603"
+    first, last = summary["vintages"]["2010"]["period_range"]["performance"]
+    assert "201001" <= first <= last <= "202603"
 
 
 @pytest.mark.parametrize("damage", ["truncate", "flip", "extra_member"])

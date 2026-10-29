@@ -38,8 +38,8 @@ was expected and says nothing about real loans.
 properties, mutation kills), Vitest, Playwright + axe. CI runs synthetic-only with SHA-pinned
 actions and a read-only token. CodeQL, Dependabot and secret scanning are on; `main` is protected
 with required checks. A publication gate scans tracked files, history and build outputs. The
-container is digest-pinned, non-root, with a health check. Decisions are recorded in five ADRs.
+container is digest-pinned, non-root, with a health check. Decisions are recorded in eight ADRs.
 
-**Limitations.** No real-data result published yet, not hosted yet, not an MBS valuation or
-advice tool.
+**Limitations.** The real-data study ran privately and is unpublished pending a terms review.
+Not hosted yet. Not an MBS valuation or advice tool.
 No independent human review has happened yet.
