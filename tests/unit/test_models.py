@@ -114,7 +114,9 @@ def test_block_scoring_equals_a_single_pass(
     whole = [m.predict_proba(valid) for m in models]
     monkeypatch.setattr("prepay.modeling.models.PREDICT_BLOCK_ROWS", 997)  # ragged last block
     for model, expected in zip(models, whole, strict=True):
-        np.testing.assert_array_equal(model.predict_proba(valid), expected)
+        # Equal to float64 rounding, not bit-exact: on some CPUs the BLAS/SIMD kernels take a
+        # different path for a short final block and round the last bit differently (seen in CI).
+        np.testing.assert_allclose(model.predict_proba(valid), expected, rtol=1e-12, atol=1e-15)
 
 
 def test_batch_slices_are_views_and_clusters_follow_loans(
