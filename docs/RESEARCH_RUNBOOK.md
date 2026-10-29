@@ -193,6 +193,16 @@ uv run prepay diagnose stability --kind seeds --data-root <data-root>   --lock c
   and explains candidates; it never confirms one.
 - Member runs refuse the lockbox. They are judged only on forward months (ADR 0010).
 
+### Curtailment feasibility (F1)
+
+```bash
+uv run prepay diagnose curtailments --data-root <data-root> --lock configs/data.lock.json   --out reports/real/curtailments.json --through 2019-12 --sample-fraction 0.02
+```
+
+The report applies the pre-declared rule in `docs/validation/CURTAILMENTS.md` (`decision`). The
+engine adds curtailments only after that rule passes and a separate change to the financial
+conventions is approved.
+
 ### Forward evaluation (ADR 0010): register now, evaluate once per later release
 
 Register the three sealed members **before** any reporting month after 2026-06 is downloaded.

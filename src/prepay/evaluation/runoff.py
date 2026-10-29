@@ -269,7 +269,10 @@ def runoff_backtest(
         "cumulative_principal_fraction": "principal by component through month k / t0 balance, "
         "over loans still observed in k; observed amortization includes curtailments",
         "curtailment": "observed amortization minus contractual scheduled principal of "
-        "continuing loans (not modeled by the engine)",
+        "continuing loans, re-amortized on each observed balance (recast convention) and "
+        "assuming one installment per month. Not modeled by the engine. For no-recast loans "
+        "that curtailed earlier it overstates curtailments, and delinquency moves it either "
+        "way: a residual, not a curtailment estimate (docs/validation/CURTAILMENTS.md)",
         "censoring": "censored loans leave both sides from the first unobserved month",
     }
     return report

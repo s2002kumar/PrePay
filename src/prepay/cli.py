@@ -336,6 +336,24 @@ def _cmd_forward_evaluate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_diagnose_curtailments(args: argparse.Namespace) -> int:
+    from prepay import periods
+    from prepay.evaluation.curtailment import study
+    from prepay.ingest.lock import read_lock
+    from prepay.io import write_json_atomic
+
+    lock = read_lock(Path(args.lock))
+    report = study(
+        Path(args.data_root),
+        through_month=periods.parse_iso(args.through),
+        sample_fraction=args.sample_fraction,
+        synthetic=lock.synthetic,
+    )
+    write_json_atomic(Path(args.out), report)
+    _emit({"out": args.out, "status": "written"})
+    return 0
+
+
 def _cmd_fingerprint(args: argparse.Namespace) -> int:
     from prepay.audit.fingerprint import warehouse_fingerprint
     from prepay.io import write_json_atomic
@@ -666,6 +684,22 @@ def build_parser() -> argparse.ArgumentParser:
     stability_cmd.add_argument("--replicates", type=int, default=5)
     stability_cmd.add_argument("--models", help="comma-separated development families")
     stability_cmd.set_defaults(handler=_cmd_diagnose_stability)
+    curtail = diagnose_sub.add_parser(
+        "curtailments",
+        help="F1: can partial prepayments be measured from balances and DDLPI? (aggregates)",
+        description=(
+            "Infers curtailments from consecutive balances, installments paid (DDLPI advance) "
+            "and both servicing conventions, excluding rounded, modified, deferred and "
+            "transition months, and reports aggregates by reporting regime and loan age with "
+            "the docs/validation/CURTAILMENTS.md decision rule."
+        ),
+    )
+    curtail.add_argument("--data-root", required=True)
+    curtail.add_argument("--lock", required=True)
+    curtail.add_argument("--out", required=True, help="JSON report path")
+    curtail.add_argument("--through", default="2019-12", help="last month read, YYYY-MM")
+    curtail.add_argument("--sample-fraction", type=float, default=0.02)
+    curtail.set_defaults(handler=_cmd_diagnose_curtailments)
 
     experiment = sub.add_parser(
         "experiment",
