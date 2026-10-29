@@ -82,6 +82,14 @@ def _load_model(run_dir: Path, name: str, pre: Preprocessor) -> HazardModel:
     raise ValueError(f"unknown model family {family!r}")
 
 
+def training_sample(manifest: dict[str, Any]) -> tuple[float | None, int]:
+    """``(fraction, index)`` of a run's loan-hash training sample (primary or experiment)."""
+    if "training_sample" in manifest:  # experiment run (ADR 0009 §8)
+        sample = manifest["training_sample"]
+        return sample["fraction"], int(sample["index"])
+    return manifest["training_config"]["train_sample_fraction"], 0
+
+
 @dataclass(frozen=True)
 class Run:
     run_dir: Path

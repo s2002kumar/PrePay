@@ -68,12 +68,36 @@ METRICS: dict[str, dict[str, str]] = {
         "formula": "balance-weighted share of loan-months whose incentive, market rate or 6-month "
         "rate change lies outside the 0.5-99.5% training range",
     },
+    "reliability_verdict": {
+        "label": "Applicability verdict",
+        "unit": "supported / extrapolating / unsupported",
+        "formula": "over the horizon, balance-weighted: unsupported if >= 25% of balance has a "
+        "monitored feature (incentive, rate level, 6-month change, age, burnout) outside the "
+        "0.5-99.5% training range; extrapolating if >= 5% outside or >= 20% outside or in joint "
+        "cells with < 1,000 training rows or < 20 payoffs; otherwise supported (ADR 0009 §7)",
+    },
+    "model_range": {
+        "label": "Model-family range",
+        "unit": "same units as the metric",
+        "formula": "min and max of the metric across the fitted model families under the same "
+        "scenario and assumptions; model disagreement, not a confidence interval",
+    },
+    "credit_exits": {
+        "label": "Credit-exit assumption",
+        "unit": "annual CDR, fraction per year",
+        "formula": "unless the credit hazard passed the sufficiency rule, d = 1 - (1 - CDR)^(1/12) "
+        "replaces the model's credit probability, and payoff and active are rescaled by "
+        "(1 - d) / (1 - p_credit_model), which keeps the model's payoff split",
+    },
 }
 
 LIMITATIONS = (
     "All portfolios are fictional and the model is trained on synthetic data; outputs say nothing "
     "about real mortgages.",
-    "Real Freddie Mac data has not been evaluated (blocked pending lawful access).",
+    "Real Freddie Mac data was evaluated privately and the results are unpublished; that model "
+    "is not approved as a reliable forecaster across rate regimes (docs/RELIABILITY_PLAN.md).",
+    "Credit exits are a stated assumption unless the credit hazard passed the sufficiency rule.",
+    "A projection outside the model's training support is labeled; read its range, not its point.",
     "Rate paths are user hypotheticals, not forecasts; there is no discounting or valuation.",
     "Scheduled payments are assumed before same-month exits; actual timing differs.",
     "Curtailments, delinquency cash timing, servicing and MBS waterfalls are not modeled.",

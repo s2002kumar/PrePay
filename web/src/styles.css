@@ -206,4 +206,6 @@ dl.defs dd { margin: 0; color: var(--ink-2); }
 @media (max-width: 640px) { dl.defs { grid-template-columns: 1fr; } }
 .is-loading { opacity: 0.55; transition: opacity 120ms; }
 .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--grid); color: var(--ink); }
+.badge.verdict-extrapolating { background: var(--warn-bg); color: var(--warn-ink); }
+.badge.verdict-unsupported { background: var(--warn-ink); color: var(--warn-bg); font-weight: 600; }
 footer.foot { color: var(--ink-muted); font-size: 13px; margin-top: 32px; }

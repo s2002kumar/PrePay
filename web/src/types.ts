@@ -62,7 +62,39 @@ export interface Summary {
   max_out_of_support_share_horizon: number;
 }
 
-export interface ScenarioOut { kind: ScenarioKind; shock_bps: number; label: string; summary: Summary; monthly: MonthlyRow[] }
+export type Verdict = "supported" | "extrapolating" | "unsupported";
+
+/** ADR 0009 §7 applicability verdict over the horizon, weighted by projected balance. */
+export interface Reliability {
+  verdict: Verdict;
+  outside_share: number;
+  sparse_share: number;
+  outside_share_by_feature: Record<string, number>;
+  reasons: string[];
+  headline: "point" | "range";
+}
+
+export interface RangeValue { min: number | null; max: number | null }
+
+/** Spread across fitted model families: model disagreement, not a confidence interval. */
+export interface ModelRange {
+  models: string[];
+  principal_returned_fraction_12m: RangeValue;
+  principal_returned_fraction_24m: RangeValue;
+  cash_wal_years: RangeValue;
+  ending_upb_horizon_usd: RangeValue;
+  note: string;
+}
+
+export interface ScenarioOut {
+  kind: ScenarioKind;
+  shock_bps: number;
+  label: string;
+  summary: Summary;
+  monthly: MonthlyRow[];
+  reliability: Reliability | null;
+  model_range: ModelRange | null;
+}
 
 export interface Deltas {
   cash_wal_months: number | null;
@@ -90,7 +122,7 @@ export interface ProjectionRequest {
   scenario: ScenarioIn;
   compare_to: ScenarioIn | null;
   horizon_months: number;
-  credit: { severity: number; recovery_lag_months: number };
+  credit: { severity: number; recovery_lag_months: number; annual_cdr_pct: number | null };
 }
 
 export interface ScenariosResponse {
