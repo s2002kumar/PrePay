@@ -194,3 +194,33 @@ def test_disjoint_samples_share_no_loan(built: tuple[Path, DataLock]) -> None:
     assert second.rows
     assert not set(first.loan_id) & set(second.loan_id)
     np.testing.assert_array_equal(first.loan_id, legacy.loan_id)  # index 0 = the primary sample
+
+
+def test_verification_reports_boolean_invariants_only(
+    dev_run: Path, built: tuple[Path, DataLock], tmp_path: Path
+) -> None:
+    from prepay.modeling.verify import verify_run
+
+    root, lock = built
+    copy = tmp_path / dev_run.name
+    import shutil
+
+    shutil.copytree(dev_run, copy)
+    # A developer's dirty tree makes clean_code fail by design; CI checks out clean code.
+    dirty = read_json(copy / "run-manifest.json")["git_dirty"] is not False
+    expected_dirty = {"clean_code"} if dirty else set()
+    unsealed = verify_run(copy, root, lock, preset_name="DEV2017")
+    assert set(unsealed["failed"]) == {"seal_intact"} | expected_dirty
+    seal(copy)
+    report = verify_run(copy, root, lock, preset_name="DEV2017")
+    assert set(report["failed"]) == expected_dirty, report["failed"]
+    for name in ("X1_factored_gbm", "X2_factored_gbm", "X3_factored_gbm", "H1_constrained_hazard"):
+        assert report["checks"][f"{name}.level_invariant"] is True
+        assert report["checks"][f"{name}.hazard_monotone_incentive"] is True
+    assert "X1_factored_gbm.hazard_monotone_burnout" not in report["checks"]
+    assert report["properties"]["H1_constrained_hazard.no_material_payoff_decrease"] is True
+    assert all(
+        isinstance(v, bool) for v in [*report["checks"].values(), *report["properties"].values()]
+    )
+    wrong = verify_run(copy, root, lock, preset_name="REFIT2026")
+    assert {"preset_windows_match", "preset_models_match"} <= set(wrong["failed"])

@@ -140,6 +140,53 @@ These are definition details found while implementing `prepay.modeling.challenge
 - **The DEV2017 designated model is X2.** Experiment runs never select; the seal needs one
   designated model, and it has no other role.
 
+## Amendment 2 (2026-10-30, before registration and before any forward month exists)
+
+These changes come from the R2 audit (`docs/validation/FORWARD_AUDIT.md`). That audit used
+simulation, synthetic data and the definitions themselves. It used no real outcome. **The
+comparison families P1–P4 and S1–S7, the members and the models are unchanged.**
+
+1. **Decision intervals are two-way.** Every paired comparison is decided on a two-way
+   (loan × month) pigeonhole bootstrap, with 1,000 replicates and the one-sided p taken from the
+   same replicates. The loan-cluster interval is reported next to it.
+   - **Why:** in simulated loan-month panels with shared monthly shocks, the 95% coverage of
+     loan-cluster intervals fell to 0.81 at a month-effect SD of 0.1 and to 0.46 at 0.3. The
+     two-way intervals stayed between 0.92 and 0.98 (400 panels × 400 replicates per design).
+   - On the synthetic world, two-way intervals for M1 − B2 were 1.46–1.66× wider. In one year
+     that reversed a "significantly worse" conclusion.
+   - With 12 forward months, two-way coverage is still slightly below nominal (about 0.90) when
+     month effects dominate. Every report states this.
+2. **Business tolerances are scaled to the regime.**
+   - **T3:** `|pool-factor error at 12 months| ≤ max(1.0 pp, 10% of the observed 12-month
+     paydown)`.
+   - **T4:** `|truncated-WAL error at 24 months| ≤ max(0.04 years, 10% of the observed
+     shortening, 2 − WAL)`.
+
+   Previously both were absolute only. That held a refinance-wave regime to a much tighter
+   relative standard than T1 and T2.
+3. **T6 is replaced.** The new rule: overall payoff A/E in [0.9, 1.1], **and** payoff A/E in
+   [0.8, 1.25] in the bottom and top fifths of rows ranked by predicted payoff probability.
+   - The old rule, prepay ECE ≤ 2× the calibration-window ECE, had no economic unit.
+   - ECE scales with the base rate, so it moves with the regime itself.
+   - The old rule also compared temperature-calibrated forward ECE with raw calibration-window
+     ECE.
+4. **Monotonicity of the final payoff probability is reported** for every model. It isn't a
+   tolerance.
+   - **Measure:** the share of forward reference rows where a step along a coherent incentive
+     grid lowers `p_prepay` by more than 1e-6 a month, plus the largest decrease.
+   - **Correction to ADR 0008's table.** For X1–X3, only the payoff *hazard* `h` is monotone by
+     construction. `p_prepay = (1 − c) h` can fall where the unconstrained credit hazard `c`
+     rises. On synthetic data this happened in 5–31% of rows, by at most 3.3e-5 a month (about
+     0.04 pp of CPR). H1 is exactly monotone.
+   - When credit is a stated assumption (F2), `p_prepay = (1 − d) h` is exactly monotone for every
+     factored model.
+5. **Members are identified by content, not path.** Evaluation may remap a member to a new
+   directory. The member must still match the registered seal SHA-256, candidate digest and run
+   ID.
+6. **A rehearsal comes before the opening.** `prepay forward rehearse` runs the evaluation code
+   on the 12 months up to the seen-through month, with the members' own lock. It records time
+   and peak memory and writes nothing into `evaluations/`. Its metrics are not evidence.
+
 ## Consequences
 
 The first confirmatory evidence arrives around Release 52, in late 2027. Until then the product
