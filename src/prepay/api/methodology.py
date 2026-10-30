@@ -100,6 +100,8 @@ LIMITATIONS = (
     "A projection outside the model's training support is labeled; read its range, not its point.",
     "Rate paths are user hypotheticals, not forecasts; there is no discounting or valuation.",
     "Scheduled payments are assumed before same-month exits; actual timing differs.",
+    "Every feature for month t uses rates known at the end of t-1, so the first projected month "
+    "reflects the last observed rate and a scenario changes behavior from month 2.",
     "Curtailments, delinquency cash timing, servicing and MBS waterfalls are not modeled.",
     "Credit severity and recovery lag are illustrative inputs, not calibrated loss estimates.",
     "Tree models may respond non-monotonically to rate shocks outside their training range.",
