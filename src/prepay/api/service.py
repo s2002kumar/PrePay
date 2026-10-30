@@ -222,6 +222,8 @@ class ProjectionService:
                 "credit_severity": request.credit.severity,
                 "recovery_lag_months": request.credit.recovery_lag_months,
                 "timing": "scheduled principal before same-month exits",
+                "scenario_timing": "month 1 uses the rate known at the as-of month (history); "
+                "a scenario's rates act from month 2",
                 "coupon": "contract note rates are fixed; scenarios change incentives only",
                 "curtailments": "not modeled",
                 "discounting": "none; cash amounts are undiscounted",

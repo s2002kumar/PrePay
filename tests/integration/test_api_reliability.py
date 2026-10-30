@@ -88,3 +88,13 @@ def test_credit_assumption_bounds_are_enforced(client: TestClient) -> None:
             },
         )
         assert response.status_code == 422
+
+
+def test_scenario_timing_is_disclosed_and_month_one_is_scenario_free(client: TestClient) -> None:
+    body = project(client, compare_to={"kind": "parallel", "shock_bps": -200})
+    assert "month 2" in body["assumptions"]["scenario_timing"]
+    a, b = body["a"]["monthly"], body["b"]["monthly"]
+    assert a[0]["voluntary_prepay_principal_usd"] == b[0]["voluntary_prepay_principal_usd"]
+    assert a[1]["voluntary_prepay_principal_usd"] != b[1]["voluntary_prepay_principal_usd"]
+    method = client.get("/api/methodology").json()
+    assert any("month 2" in item for item in method["limitations"])
