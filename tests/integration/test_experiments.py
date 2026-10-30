@@ -180,6 +180,9 @@ def test_rolling_origin_reads_development_months_only(
         for errors in horizon["models"].values():
             total = errors["behavioral_error_pp"] + errors["rate_path_error_pp"]
             assert total == pytest.approx(errors["total_error_pp"], abs=1e-9)
+    paired = report["paired_log_loss_difference"]["M1_lightgbm"]["B2_logistic"]
+    assert paired["method"] == "two_way"
+    assert "estimate" in paired["loan_cluster"]
     regime = report["regime_calibration"]["B2_logistic"]["dimensions"]
     assert set(regime) == {"rate_level_band", "rate_change_6m", "new_low"}
 
