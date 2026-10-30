@@ -33,6 +33,7 @@ import numpy as np
 from prepay import periods
 from prepay.evaluation.attribution import cohort_attribution, runoff_attribution
 from prepay.evaluation.cohort import backtest as cohort_backtest
+from prepay.evaluation.inference import summarize, two_way
 from prepay.evaluation.regimes import regime_dimensions
 from prepay.evaluation.runoff import runoff_backtest
 from prepay.evaluation.segments import segment_report
@@ -453,6 +454,28 @@ def run_experiment(
     return run_dir
 
 
+def paired_development(
+    batch: PanelBatch, candidate: np.ndarray, reference: np.ndarray
+) -> dict[str, Any]:
+    """Paired log-loss difference with a two-way (loan x month) interval; loan-cluster reported.
+
+    Folds share monthly shocks across loans, so loan-cluster intervals alone are too narrow
+    (``docs/validation/FORWARD_AUDIT.md``). Fold tallies use the two-way interval.
+    """
+    difference = metrics.row_log_loss(candidate, batch.outcome_class) - metrics.row_log_loss(
+        reference, batch.outcome_class
+    )
+    decision = summarize(
+        two_way(batch.clusters(), batch.target_month, difference, replicates=200, seed=20261028),
+        float(difference.mean()),
+        "two_way",
+    )
+    return {
+        **decision.as_dict(),
+        "loan_cluster": metrics.paired_difference(batch, candidate, reference),
+    }
+
+
 def _overall_ae(result: dict[str, Any]) -> float | None:
     expected = result["prepay"]["mean_predicted"] * result["rows"]
     return result["events"]["prepay"] / expected if expected > 0 else None
@@ -493,7 +516,7 @@ def evaluate_development(
     results = {name: metrics.evaluate(batch, p) for name, p in predictions.items()}
     paired = {
         name: {
-            ref: metrics.paired_difference(batch, predictions[name], predictions[ref])
+            ref: paired_development(batch, predictions[name], predictions[ref])
             for ref in REFERENCES
             if ref in predictions and ref != name
         }
@@ -617,7 +640,8 @@ def rolling_origin(
         "kind": "prepay-rolling-origin",
         "evidence_class": "synthetic" if lock.synthetic else "development",
         "note": "fold results are serially dependent; no significance test is pooled across "
-        "folds (ADR 0009 §4). Development evidence never confirms a candidate.",
+        "folds (ADR 0009 §4). Development evidence never confirms a candidate. Fold tallies use "
+        "two-way (loan x month) intervals; loan-cluster intervals are reported alongside.",
         "data_lock_fingerprint": lock.fingerprint(),
         "base_config_digest": canonical_digest(asdict(base)),
         "origins": [periods.to_iso(o) for o in origins],
