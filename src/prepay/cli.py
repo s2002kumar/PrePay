@@ -327,11 +327,27 @@ def _cmd_forward_register(args: argparse.Namespace) -> int:
     return 0
 
 
+def _member_dirs(specs: list[str]) -> dict[str, Path]:
+    members = {}
+    for spec in specs:
+        label, sep, path = spec.partition("=")
+        if not sep or not label or not path:
+            raise ValueError(f"--member expects LABEL=PATH, got {spec!r}")
+        members[label] = Path(path)
+    return members
+
+
 def _cmd_forward_evaluate(args: argparse.Namespace) -> int:
-    from prepay.evaluation.forward import evaluate
+    from prepay.evaluation.forward import evaluate, rehearse
     from prepay.ingest.lock import read_lock
 
-    target = evaluate(Path(args.registry), Path(args.data_root), read_lock(Path(args.lock)))
+    action = rehearse if args.forward_command == "rehearse" else evaluate
+    target = action(
+        Path(args.registry),
+        Path(args.data_root),
+        read_lock(Path(args.lock)),
+        member_dirs=_member_dirs(args.member),
+    )
     _emit({"report": target.as_posix(), "status": "written"})
     return 0
 
@@ -352,6 +368,19 @@ def _cmd_diagnose_curtailments(args: argparse.Namespace) -> int:
     write_json_atomic(Path(args.out), report)
     _emit({"out": args.out, "status": "written"})
     return 0
+
+
+def _cmd_experiment_verify(args: argparse.Namespace) -> int:
+    from prepay.ingest.lock import read_lock
+    from prepay.io import write_json_atomic
+    from prepay.modeling.verify import verify_run
+
+    report = verify_run(
+        Path(args.run), Path(args.data_root), read_lock(Path(args.lock)), preset_name=args.preset
+    )
+    write_json_atomic(Path(args.out), report)
+    _emit({"out": args.out, "all_pass": report["all_pass"], "failed": report["failed"]})
+    return 0 if report["all_pass"] else 2
 
 
 def _cmd_fingerprint(args: argparse.Namespace) -> int:
@@ -727,6 +756,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="allow reading 2020-01 or later; the run is labeled exploratory-opened-window",
     )
     exp_run.set_defaults(handler=_cmd_experiment_run)
+    exp_verify = experiment_sub.add_parser(
+        "verify",
+        help="boolean implementation checks of an experiment run (no metric is computed)",
+        description=(
+            "Checks manifest completeness, clean code, lock and preset, seal, bit-identical "
+            "reload, coherence, rate-level invariance, monotone payoff hazards and derived-feature "
+            "parity on a sample of the run's calibration window. Reports booleans only; exit "
+            "code 2 if any implementation check fails."
+        ),
+    )
+    exp_verify.add_argument("--run", required=True)
+    exp_verify.add_argument("--data-root", required=True)
+    exp_verify.add_argument("--lock", required=True)
+    exp_verify.add_argument("--preset", choices=["DEV2017", "REFIT2026"])
+    exp_verify.add_argument("--out", required=True, help="JSON report path")
+    exp_verify.set_defaults(handler=_cmd_experiment_verify)
     exp_roll = experiment_sub.add_parser(
         "rolling-origin",
         help="ADR 0009 §4 development folds (outcomes through 2019-12 only)",
@@ -773,10 +818,27 @@ def build_parser() -> argparse.ArgumentParser:
             "after the seen-through month, and writes a read-only report. Prints only its path."
         ),
     )
-    forward_evaluate.add_argument("--registry", required=True)
-    forward_evaluate.add_argument("--data-root", required=True)
-    forward_evaluate.add_argument("--lock", required=True)
-    forward_evaluate.set_defaults(handler=_cmd_forward_evaluate)
+    forward_rehearse = forward_sub.add_parser(
+        "rehearse",
+        help="dress rehearsal on the 12 months up to the seen-through month (members' own lock)",
+        description=(
+            "Runs the evaluation code end to end on months the members have already seen, and "
+            "records stage times and peak memory, so the one real opening can't fail half way. "
+            "Writes to <registry>/rehearsals/; never counts as an evaluation."
+        ),
+    )
+    for command in (forward_evaluate, forward_rehearse):
+        command.add_argument("--registry", required=True)
+        command.add_argument("--data-root", required=True)
+        command.add_argument("--lock", required=True)
+        command.add_argument(
+            "--member",
+            action="append",
+            default=[],
+            metavar="LABEL=PATH",
+            help="relocated member run (identity is checked by seal SHA-256 and digest)",
+        )
+        command.set_defaults(handler=_cmd_forward_evaluate)
 
     fingerprint = sub.add_parser(
         "fingerprint", help="row count and order-independent content hash of every warehouse table"

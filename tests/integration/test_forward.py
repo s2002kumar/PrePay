@@ -30,6 +30,7 @@ from prepay.evaluation.forward import (
     load_registration,
     paired_test,
     register,
+    rehearse,
 )
 from prepay.features.panel import PanelBatch
 from prepay.ingest import ingest_all
@@ -177,6 +178,9 @@ def test_the_report_holds_families_tolerances_and_scope(
     comparisons = report["comparisons"]
     for key in ("P1", "P2", "P3", "P4", "S1", "S2", "S3"):
         assert {"estimate", "low", "high", "p_one_sided", "holm"} <= set(comparisons[key])
+        # Amendment 2: decisions use two-way (loan x month) intervals; loan-cluster is reported.
+        assert comparisons[key]["method"] == "two_way"
+        assert comparisons[key]["loan_cluster"]["method"] == "loan_cluster"
     primary = [comparisons[k]["holm"]["p_holm"] for k in ("P1", "P2", "P3", "P4")]
     assert all(0.0 < p <= 1.0 for p in primary)
     verdicts = report["tolerance_verdicts"]
@@ -185,8 +189,15 @@ def test_the_report_holds_families_tolerances_and_scope(
     for verdict in verdicts.values():
         assert {"T1", "T2", "T3", "T5", "T6"} <= set(verdict["checks"])
         assert "T4" not in verdict["checks"]  # only 12 forward months
+        assert set(verdict["checks"]["T6"]["quintile_ae"]) == {"bottom", "top"}
         assert isinstance(verdict["fit_for_stated_use"], bool)
-    assert set(report["regime_of_forward_rows"]) == {"level_band", "rate_change_6m", "new_low"}
+    assert set(report["regime_of_scored_rows"]) == {"level_band", "rate_change_6m", "new_low"}
+    monotone = report["monotonicity"]
+    assert set(monotone) == set(verdicts)
+    for name in ("DEV2017/H1_constrained_hazard",):  # its credit hazard ignores incentive
+        assert monotone[name]["share_rows_with_material_decrease"] == 0.0
+    assert report["definitions"]["interval_method"] == "two_way"
+    assert set(report["stages"]) >= {"read", "paired_tests", "monotonicity"}
     assert "regime" in report["scope"]
 
 
@@ -240,6 +251,47 @@ def test_tampered_members_or_registrations_are_refused(
         load_registration(directory)
 
 
+def test_members_can_move_but_must_keep_their_content(
+    members: dict[str, Path],
+    earlier_world: tuple[Path, DataLock],
+    built: tuple[Path, DataLock],
+    tmp_path: Path,
+) -> None:
+    copies = {}
+    for label, run_dir in members.items():
+        copies[label] = tmp_path / "before" / label / run_dir.name
+        shutil.copytree(run_dir, copies[label])
+    directory = tmp_path / "registry"
+    register(directory, copies, earlier_world[1], comparisons=COMPARISONS)
+    moved = {label: tmp_path / "after" / label for label in copies}
+    (tmp_path / "after").mkdir()
+    for label, path in copies.items():
+        path.rename(moved[label])  # a same-volume move keeps the read-only seal intact
+    with pytest.raises(ForwardError, match="no seal"):
+        load_registration(directory)  # the registered paths are gone
+    with pytest.raises(ForwardError, match="seal differs"):
+        load_registration(directory, {"REF": moved["DEV2017"], "DEV2017": moved["DEV2017"]})
+    with pytest.raises(ForwardError, match="not registered"):
+        load_registration(directory, {**moved, "EXTRA": moved["REF"]})
+    target = evaluate(directory, built[0], built[1], member_dirs=moved)
+    assert json.loads(target.read_text(encoding="utf-8"))["primary_opening"] is True
+
+
+def test_rehearsal_runs_on_the_members_lock_and_never_counts(
+    registry: Path, earlier_world: tuple[Path, DataLock], built: tuple[Path, DataLock]
+) -> None:
+    root, lock = earlier_world
+    target = rehearse(registry, root, lock)
+    report = json.loads(target.read_text(encoding="utf-8"))
+    assert report["kind"] == "prepay-forward-rehearsal"
+    assert "not evidence" in report["evidence_class"]
+    assert report["scored_months"] == "2024-07..2025-06"
+    assert report["peak_rss_bytes"] > 0
+    assert target.parent.name == "rehearsals"
+    with pytest.raises(ForwardError, match="members' own lock"):
+        rehearse(registry, built[0], built[1])
+
+
 def test_holm_and_the_paired_bootstrap() -> None:
     decisions = holm({"a": 0.01, "b": 0.04, "c": 0.03})
     assert decisions["a"]["p_holm"] == pytest.approx(0.03)
@@ -253,4 +305,10 @@ def test_holm_and_the_paired_bootstrap() -> None:
     worse = paired_test(clusters, rng.normal(0.01, 0.02, 2000), replicates=400)
     assert better["p_one_sided"] < 0.01
     assert better["high"] < 0
+    assert better["method"] == "loan_cluster"  # no months given
     assert worse["p_one_sided"] > 0.99
+    months = np.tile(np.arange(4), 500)
+    shocked = rng.normal(-0.01, 0.02, 2000) + rng.normal(0, 0.05, 4)[months]
+    two = paired_test(clusters, shocked, months=months, replicates=400)
+    assert two["method"] == "two_way"
+    assert two["high"] - two["low"] > two["loan_cluster"]["high"] - two["loan_cluster"]["low"]
