@@ -252,3 +252,30 @@ def test_candidates_round_trip_through_the_registry(
     payload = json.loads((tmp_path / "models" / "H1_constrained_hazard.json").read_text())
     assert payload["monotone_term_slopes"]["incentive_per_bp"]
     assert not list(tmp_path.rglob("*.pkl"))
+
+
+def test_h1_chunked_design_equals_the_full_computation(
+    world: tuple[PanelBatch, PanelBatch, Preprocessor], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Chunked H1 design and merged moments equal a one-shot computation (memory fix, R2)."""
+    from prepay.modeling import challengers
+    from prepay.modeling.challengers import HazardDesign
+
+    train, valid, pre = world
+    whole = HazardDesign.fit(pre, train)
+    monkeypatch.setattr(challengers, "DESIGN_CHUNK_ROWS", 997)  # odd size: ragged final chunk
+    chunked = HazardDesign.fit(pre, train)
+    np.testing.assert_allclose(chunked.payoff_center, whole.payoff_center, rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(chunked.payoff_scale, whole.payoff_scale, rtol=1e-10)
+    np.testing.assert_allclose(chunked.credit_scale, whole.credit_scale, rtol=1e-10)
+    raw, n_monotone = whole.raw_payoff(pre, valid)
+    reference = (raw - np.asarray(whole.payoff_center)) / np.asarray(whole.payoff_scale)
+    built, n = chunked.payoff_matrix(pre, valid)
+    assert n == n_monotone
+    np.testing.assert_allclose(
+        built,
+        (raw - np.asarray(chunked.payoff_center)) / np.asarray(chunked.payoff_scale),
+        rtol=1e-12,
+        atol=1e-12,
+    )
+    np.testing.assert_allclose(built, reference, rtol=1e-8, atol=1e-9)

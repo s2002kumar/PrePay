@@ -376,14 +376,23 @@ class HazardDesign:
         return np.hstack([self._age(batch), self._statics(batch), self._one_hot(pre, batch)])
 
     def payoff_matrix(self, pre: Preprocessor, batch: PanelBatch) -> tuple[FloatArray, int]:
-        raw, n_monotone = self.raw_payoff(pre, batch)
-        return (raw - np.asarray(self.payoff_center)) / np.asarray(self.payoff_scale), n_monotone
+        n_monotone = (
+            len(self.incentive_knots) + len(self.opportunity_knots) + len(self.burnout_knots) + 3
+        )
+        out = _scaled_rows(
+            lambda part: self.raw_payoff(pre, part)[0],
+            batch,
+            np.asarray(self.payoff_center),
+            np.asarray(self.payoff_scale),
+        )
+        return out, n_monotone
 
     def credit_matrix(self, pre: Preprocessor, batch: PanelBatch) -> FloatArray:
-        raw = self.raw_credit(pre, batch)
-        return np.asarray(
-            (raw - np.asarray(self.credit_center)) / np.asarray(self.credit_scale),
-            dtype=np.float64,
+        return _scaled_rows(
+            lambda part: self.raw_credit(pre, part),
+            batch,
+            np.asarray(self.credit_center),
+            np.asarray(self.credit_scale),
         )
 
     @classmethod
@@ -415,19 +424,20 @@ class HazardDesign:
             credit_center=[],
             credit_scale=[],
         )
-        payoff, n_monotone = draft.raw_payoff(pre, batch)
-        credit = draft.raw_credit(pre, batch)
+        n_monotone = len(draft.incentive_knots) + len(draft.opportunity_knots)
+        n_monotone += len(draft.burnout_knots) + 3
 
-        def center_scale(raw: FloatArray, n_uncentered: int) -> tuple[list[float], list[float]]:
+        def center_scale(raw_fn: Any, n_uncentered: int) -> tuple[list[float], list[float]]:
             # Monotone columns are only scaled: a positive scale keeps every slope's sign.
-            center = raw.mean(axis=0)
-            center[:n_uncentered] = 0.0
-            scale = raw.std(axis=0)
-            scale = np.where(scale > 1e-12, scale, 1.0)
-            return center.tolist(), scale.tolist()
+            mean, std = _column_moments(raw_fn, batch)
+            mean[:n_uncentered] = 0.0
+            scale = np.where(std > 1e-12, std, 1.0)
+            return mean.tolist(), scale.tolist()
 
-        payoff_center, payoff_scale = center_scale(payoff, n_monotone)
-        credit_center, credit_scale = center_scale(credit, 0)
+        payoff_center, payoff_scale = center_scale(
+            lambda part: draft.raw_payoff(pre, part)[0], n_monotone
+        )
+        credit_center, credit_scale = center_scale(lambda part: draft.raw_credit(pre, part), 0)
         return cls(
             **{
                 **asdict(draft),
@@ -437,6 +447,56 @@ class HazardDesign:
                 "credit_scale": credit_scale,
             }
         )
+
+
+#: Rows per chunk when building H1 design matrices: bounds the transient memory of the raw blocks.
+DESIGN_CHUNK_ROWS = 1 << 16
+
+
+def _scaled_rows(
+    raw_fn: Any, batch: PanelBatch, center: FloatArray, scale: FloatArray
+) -> FloatArray:
+    """``(raw - center) / scale`` built chunk by chunk into one preallocated array."""
+    out = np.empty((batch.rows, center.shape[0]))
+    for start in range(0, batch.rows, DESIGN_CHUNK_ROWS):
+        part = np.asarray(raw_fn(batch.slice(start, start + DESIGN_CHUNK_ROWS)), dtype=np.float64)
+        part -= center
+        part /= scale
+        out[start : start + part.shape[0]] = part
+    return out
+
+
+def _column_moments(raw_fn: Any, batch: PanelBatch) -> tuple[FloatArray, FloatArray]:
+    """Column means and population SDs over all rows, merging chunk moments (Chan et al.)."""
+    count, mean, m2 = 0, None, None
+    for start in range(0, batch.rows, DESIGN_CHUNK_ROWS):
+        part = np.asarray(raw_fn(batch.slice(start, start + DESIGN_CHUNK_ROWS)), dtype=np.float64)
+        n_b = part.shape[0]
+        mean_b = part.mean(axis=0)
+        m2_b = ((part - mean_b) ** 2).sum(axis=0)
+        if mean is None or m2 is None:
+            count, mean, m2 = n_b, mean_b, m2_b
+            continue
+        delta = mean_b - mean
+        total = count + n_b
+        mean = mean + delta * (n_b / total)
+        m2 = m2 + m2_b + delta**2 * (count * n_b / total)
+        count = total
+    if mean is None or m2 is None:
+        raise ValueError("no rows to compute moments from")
+    return mean, np.sqrt(m2 / count)
+
+
+def _rows(batch: PanelBatch, index: np.ndarray) -> PanelBatch:
+    """The batch restricted to ``index`` (a copy of the selected rows)."""
+    return PanelBatch(
+        loan_id=batch.loan_id[index],
+        target_month=batch.target_month[index],
+        outcome_class=batch.outcome_class[index],
+        exposure_upb=batch.exposure_upb[index],
+        features={name: values[index] for name, values in batch.features.items()},
+        loan_code=None if batch.loan_code is None else batch.loan_code[index],
+    )
 
 
 def _sigmoid(z: FloatArray) -> FloatArray:
@@ -503,11 +563,14 @@ class ConstrainedHazard(HazardModel):
         credit_x = design.credit_matrix(pre, train)
         credit_b, credit_w = fit_logistic(credit_x, y == 2, l2=l2)
         del credit_x
-        keep = y != 2
-        payoff_x, n_monotone = design.payoff_matrix(pre, train)
+        # The payoff hazard is fitted on rows without a credit exit; building the design only for
+        # those rows avoids holding a full design and a filtered copy at the same time.
+        survivors = _rows(train, np.nonzero(y != 2)[0])
+        payoff_x, n_monotone = design.payoff_matrix(pre, survivors)
         payoff_b, payoff_w = fit_logistic(
-            payoff_x[keep], y[keep] == 1, l2=l2, nonnegative=n_monotone
+            payoff_x, survivors.outcome_class == 1, l2=l2, nonnegative=n_monotone
         )
+        del payoff_x
         return cls(pre, design, payoff_b, payoff_w.tolist(), credit_b, credit_w.tolist(), float(l2))
 
     def hazards(self, batch: PanelBatch) -> tuple[FloatArray, FloatArray]:
