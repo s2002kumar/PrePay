@@ -28,7 +28,8 @@ interface StoredProjection {
   monthly: MonthlyRow[];
   by_horizon: Record<string, Pick<ScenarioOut, "summary" | "reliability" | "model_range">>;
 }
-type Pairs = Record<string, Pick<ProjectionResponse, "a_minus_b" | "warnings">>;
+/** pairs[A][B]: the A−B deltas and warnings of one comparison (nested keys, no delimiter). */
+type Pairs = Record<string, Record<string, Pick<ProjectionResponse, "a_minus_b" | "warnings">>>;
 
 const files = new Map<string, Promise<unknown>>();
 
@@ -72,7 +73,7 @@ export function assemble(
     return { ...stored.scenario, summary: at.summary, monthly: stored.monthly.slice(0, horizon), reliability: at.reliability, model_range: at.model_range };
   };
   const pool = index.pools[poolId];
-  const pair = pairs[`${codeA}|${codeB}`];
+  const pair = pairs[codeA]?.[codeB];
   if (!pool || !pair) throw new ApiRequestError(404, "static_missing", "No precomputed comparison for these inputs");
   return {
     ...pool,

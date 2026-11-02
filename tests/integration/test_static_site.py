@@ -75,6 +75,12 @@ def test_get_payloads_are_the_api_payloads(static_data: Path, demo_bundle: Path)
     assert health["data_class"] == "fictional"
 
 
+def test_static_data_passes_the_publication_gate(static_data: Path) -> None:
+    from prepay.publication import scan_tree
+
+    assert scan_tree(static_data, "static") == []
+
+
 def test_site_has_an_entry_per_route(demo_bundle: Path, tmp_path: Path) -> None:
     web = tmp_path / "web"
     (web / "assets").mkdir(parents=True)

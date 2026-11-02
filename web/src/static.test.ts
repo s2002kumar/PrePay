@@ -43,7 +43,7 @@ describe("static adapter", () => {
       horizons: [2],
       pools: { p: { data_class: "fictional" as const, notice: "n", pool_id: "p", as_of: "2026-06", model: "B2_logistic", assumptions: {} } },
     };
-    const pairs = { "flat|none": { a_minus_b: null, warnings: ["w"] } };
+    const pairs = { flat: { none: { a_minus_b: null, warnings: ["w"] } } };
     const out = assemble(index, { flat: stored }, pairs, "p", "flat", "none", 2);
     expect(out.a.monthly.map((r) => r.month)).toEqual(["2026-07", "2026-08"]);
     expect(out.b).toBeNull();

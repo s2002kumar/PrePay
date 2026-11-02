@@ -7,7 +7,8 @@ restructures those responses so that each scenario's monthly ledger is stored on
 - ``api/<name>.json``: the GET payloads (pools, scenarios, methodology, model quality, health);
 - ``projections/<pool>/<code>.json``: one scenario's full-horizon monthly rows, plus its summary,
   reliability and model range at each horizon;
-- ``pairs/<pool>/<horizon>.json``: per scenario pair, the A-B deltas and the warnings;
+- ``pairs/<pool>/<horizon>.json``: per scenario pair (``pairs[A][B]``), the A-B deltas and the
+  warnings;
 - ``index.json``: the grid and the per-pool response fields.
 
 :func:`assemble` rebuilds a projection response from these files, and the export reassembles
@@ -83,7 +84,7 @@ def assemble(
             "model_range": at["model_range"],
         }
 
-    pair = pairs[f"{code_a}|{code_b}"]
+    pair = pairs[code_a][code_b]
     return {
         **index["pools"][pool_id],
         "a": scenario_out(code_a),
@@ -152,7 +153,7 @@ def export_static(
                     common = {key: response[key] for key in PER_POOL}
                     if index["pools"].setdefault(pool_id, common) != common:
                         raise AssertionError(f"per-pool fields vary within {pool_id}")
-                    pairs[f"{code_a}|{code_b}"] = {
+                    pairs.setdefault(code_a, {})[code_b] = {
                         "a_minus_b": response["a_minus_b"],
                         "warnings": response["warnings"],
                     }
