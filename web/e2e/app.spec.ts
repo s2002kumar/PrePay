@@ -32,6 +32,21 @@ test("scenario lab compares two scenarios and keeps state in the URL", async ({ 
   await expect(second.getByLabel("Scenario B", { exact: true })).toHaveValue("p200");
 });
 
+test("the active model, its assumptions and each scenario's applicability are visible", async ({ page }) => {
+  await page.goto("/scenario-lab?pool=fictional-2023-high-coupon&a=flat&b=p-200&h=120");
+  await waitForProjection(page);
+  const context = page.getByRole("region", { name: "Active model and assumptions" });
+  await expect(context).toContainText(/Active model\s*(B[0-2]|M1) /);
+  await expect(context).toContainText("trained on synthetic data");
+  await expect(context).toContainText("Credit exits");
+  await expect(context).toContainText("rates act from month 2");
+  await expect(page.locator(".comparison")).toContainText(/B returns|Both return/);
+  const applicability = page.getByRole("table", { name: /Applicability and model-family range/ });
+  await expect(applicability).toContainText("Flat at last observed");
+  await expect(applicability).toContainText("Parallel -200 bp");
+  await expect(applicability).toContainText(/supported|extrapolating|unsupported/);
+});
+
 test("custom ramp scenario and assumptions drawer", async ({ page }) => {
   await page.goto("/scenario-lab?pool=fictional-2021-low-coupon&a=flat&b=none&h=60");
   await waitForProjection(page);
