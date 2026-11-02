@@ -75,6 +75,11 @@ class ProjectionService:
             SELECTED: self.model,
             **{name: run.models[name] for name in RANGE_FAMILIES if name in run.models},
         }
+        # An uncalibrated selection is the same object as its family: project it once.
+        self._canonical = {
+            key: next(k for k, m in self.models.items() if m is model)
+            for key, model in self.models.items()
+        }
         sufficiency = run.manifest.get("credit_sufficiency") or {}
         self.credit_validated = bool(sufficiency.get("credit_hazard_validated"))
         reference = run.models.get("B0_psa")
@@ -138,7 +143,7 @@ class ProjectionService:
             scenario,
             credit.severity,
             credit.recovery_lag_months,
-            model_key,
+            self._canonical[model_key],
             self.credit_hazard(credit),
         )
 
@@ -147,7 +152,7 @@ class ProjectionService:
         default = CreditIn()
         for pool_id in self.pools:
             for scenario in STANDARD_SCENARIOS:
-                for model_key in self.models:
+                for model_key in dict.fromkeys(self._canonical.values()):
                     self.result(pool_id, scenario, default, model_key)
         self.warm.set()
         log.info("projection cache warm", extra={"entries": self._project.cache_info().currsize})

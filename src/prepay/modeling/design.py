@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 from scipy.interpolate import BSpline
 
-from prepay.arrays import FloatArray
+from prepay.arrays import FloatArray, IntArray
 from prepay.features.batch import PanelBatch
 from prepay.features.spec import CATEGORICAL, NUMERIC
 
@@ -26,6 +26,20 @@ OTHER = "__other__"
 
 def _as_text(values: np.ndarray) -> list[str]:
     return [MISSING if v is None else str(v) for v in values]
+
+
+def _text_codes(values: np.ndarray) -> tuple[list[str], IntArray]:
+    """Distinct texts and per-row codes with ``texts[codes[i]] == _as_text(values)[i]``.
+
+    The row loop of :func:`_as_text` runs once per distinct value instead of once per row;
+    encodings built from it are identical, and far cheaper on long scenario panels.
+    """
+    array = np.asarray(values, dtype=object)
+    missing = np.asarray(array == None, dtype=bool)  # noqa: E711 - elementwise on objects
+    text = np.full(array.shape, MISSING, dtype=object)
+    text[~missing] = array[~missing].astype(str)
+    uniques, codes = np.unique(text.astype(str), return_inverse=True)
+    return [str(u) for u in uniques], np.asarray(codes, dtype=np.int64).reshape(-1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,12 +97,17 @@ class Preprocessor:
         return np.asarray(basis, dtype=np.float64)
 
     def one_hot(self, batch: PanelBatch, name: str) -> FloatArray:
-        text = np.asarray(_as_text(batch.features[name]), dtype=object)
+        texts, codes = _text_codes(batch.features[name])
         known = self.levels[name]
-        columns = [text == level for level in known]
-        columns.append(text == MISSING)
-        columns.append((text != MISSING) & ~np.isin(text, known))
-        return np.column_stack(columns).astype(np.float64)
+        table = np.zeros((len(texts), len(known) + 2))
+        for row, text in enumerate(texts):
+            if text in known:
+                table[row, known.index(text)] = 1.0
+            elif text == MISSING:
+                table[row, len(known)] = 1.0
+            else:
+                table[row, len(known) + 1] = 1.0
+        return table[codes].reshape(codes.size, len(known) + 2)
 
     # ----------------------------------------------------------------- dense (logistic)
     def dense(self, batch: PanelBatch) -> FloatArray:
@@ -122,9 +141,9 @@ class Preprocessor:
         """Raw numerics (NaN kept for native missing handling) + categorical integer codes."""
         columns = [np.asarray(batch.features[n], dtype=np.float64) for n in self.numeric]
         for n in self.categorical:
-            text = _as_text(batch.features[n])
+            texts, codes = _text_codes(batch.features[n])
             code = {level: float(i) for i, level in enumerate(self.levels[n])}
-            columns.append(np.array([code.get(t, np.nan) for t in text]))
+            columns.append(np.array([code.get(t, np.nan) for t in texts], dtype=np.float64)[codes])
         return np.column_stack(columns)
 
     def tree_categorical_indices(self) -> list[int]:

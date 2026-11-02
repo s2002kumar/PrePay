@@ -43,6 +43,34 @@ class HazardPredictor(Protocol):
 
 
 @dataclass(frozen=True)
+class SupportByMonth:
+    """Projected beginning balance per month, split by ADR 0009 §7 row status (pool rows).
+
+    Monthly sums keep a cached result small: per-line arrays would hold several MB each.
+    """
+
+    total: FloatArray
+    outside: FloatArray
+    sparse: FloatArray
+    outside_by_feature: dict[str, FloatArray]
+
+    @classmethod
+    def of(
+        cls, balance: FloatArray, status: IntArray, outside_by_feature: dict[str, BoolArray]
+    ) -> SupportByMonth:
+        """``balance``, ``status`` and each flag array are shaped (lines, months)."""
+        return cls(
+            total=balance.sum(axis=0),
+            outside=np.where(status == OUTSIDE, balance, 0.0).sum(axis=0),
+            sparse=np.where(status == SPARSE, balance, 0.0).sum(axis=0),
+            outside_by_feature={
+                name: np.where(flags, balance, 0.0).sum(axis=0)
+                for name, flags in outside_by_feature.items()
+            },
+        )
+
+
+@dataclass(frozen=True)
 class ScenarioResult:
     pool_id: str
     scenario: RateScenario
@@ -50,9 +78,7 @@ class ScenarioResult:
     rate_path_30y: FloatArray  # month-end scenario rates for t0+1..t0+months (percent)
     ledger: PoolLedger  # full life
     out_of_support_share: FloatArray  # balance-weighted share of rows outside training support
-    line_balance: FloatArray | None = None  # (lines, months) beginning UPB, for R1 weights
-    support_status: IntArray | None = None  # (lines, months) R1 status: 0 / SPARSE / OUTSIDE
-    outside_by_feature: dict[str, BoolArray] | None = None  # (lines, months) per feature
+    support_by_month: SupportByMonth | None = None  # R1 weights; None without a profile
 
     def reliability(self, horizon: int) -> dict[str, Any] | None:
         """ADR 0009 §7 verdict over the horizon, weighted by projected balance (pool rows only).
@@ -60,19 +86,18 @@ class ScenarioResult:
         A pool is judged on row support, not PSI (ADR 0009 amendment 1). ``None`` when the
         model came without a support profile.
         """
-        if self.support_status is None or self.line_balance is None:
+        if self.support_by_month is None:
             return None
         months = min(horizon, self.ledger.months)
-        weight = self.line_balance[:, :months]
-        status = self.support_status[:, :months]
-        total = float(weight.sum())
+        support = self.support_by_month
+        total = float(support.total[:months].sum())
         if total <= 0:
             return None
-        outside = float(weight[status == OUTSIDE].sum() / total)
-        sparse = float(weight[status == SPARSE].sum() / total)
+        outside = float(support.outside[:months].sum() / total)
+        sparse = float(support.sparse[:months].sum() / total)
         by_feature = {
-            name: float(weight[flags[:, :months]].sum() / total)
-            for name, flags in (self.outside_by_feature or {}).items()
+            name: float(weights[:months].sum() / total)
+            for name, weights in support.outside_by_feature.items()
         }
         verdict = decide(outside, sparse)
         reasons = [
@@ -199,12 +224,13 @@ def project_pool(
     total = balance.sum(axis=0)
     share = np.divide((balance * outside).sum(axis=0), total, out=np.zeros(months), where=total > 0)
     start = t0 + 1 - path.first_month
-    status = by_feature = None
+    by_month = None
     if profile is not None:
-        status = profile.row_status(features).reshape(n, months)
-        by_feature = {
-            name: flags.reshape(n, months) for name, flags in profile.outside(features).items()
-        }
+        by_month = SupportByMonth.of(
+            balance,
+            profile.row_status(features).reshape(n, months),
+            {name: flags.reshape(n, months) for name, flags in profile.outside(features).items()},
+        )
     return ScenarioResult(
         pool.pool_id,
         scenario,
@@ -212,9 +238,7 @@ def project_pool(
         path.rate_30y[start : start + months],
         projection.pool,
         share,
-        line_balance=balance,
-        support_status=status,
-        outside_by_feature=by_feature,
+        support_by_month=by_month,
     )
 
 

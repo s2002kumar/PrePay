@@ -102,3 +102,30 @@ def test_profile_round_trips_through_json(profile: SupportProfile) -> None:
     rows = _features(2_000, 9, shift=-120.0)
     np.testing.assert_array_equal(restored.row_status(rows), profile.row_status(rows))
     assert restored.assess(rows) == profile.assess(rows)
+
+
+def test_monthly_support_sums_equal_the_per_line_weighting() -> None:
+    """ScenarioResult keeps monthly sums; every horizon's shares equal the per-line formula."""
+    from prepay.reliability.support import OUTSIDE, SPARSE
+    from prepay.scenarios.projection import SupportByMonth
+
+    rng = np.random.default_rng(7)
+    lines, months = 40, 30
+    balance = rng.uniform(0, 5e5, (lines, months))
+    status = rng.choice([0, SPARSE, OUTSIDE], size=(lines, months), p=[0.7, 0.2, 0.1])
+    flags = {"incentive_bps": rng.random((lines, months)) < 0.1}
+    support = SupportByMonth.of(balance, status, flags)
+    for horizon in (1, 12, months):
+        weight, state = balance[:, :horizon], status[:, :horizon]
+        total = weight.sum()
+        assert support.total[:horizon].sum() == pytest.approx(total, rel=1e-12)
+        assert support.outside[:horizon].sum() / total == pytest.approx(
+            weight[state == OUTSIDE].sum() / total, rel=1e-12
+        )
+        assert support.sparse[:horizon].sum() / total == pytest.approx(
+            weight[state == SPARSE].sum() / total, rel=1e-12
+        )
+        mask = flags["incentive_bps"][:, :horizon]
+        assert support.outside_by_feature["incentive_bps"][:horizon].sum() == pytest.approx(
+            weight[mask].sum(), rel=1e-12
+        )
