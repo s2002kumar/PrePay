@@ -1,6 +1,6 @@
 # R2 quality-gate report: empirical development evidence and audit readiness
 
-Prepared 2026-10-30 by the implementing agent. **Self-review, not independent review.**
+Prepared 2026-10-30, updated 2026-11-02, by the implementing agent. **Self-review, not independent review.**
 
 **Verdict: the forecasting model is not shown to be accurate and is not production-ready.**
 R2 did three things:
@@ -9,7 +9,7 @@ R2 did three things:
 - prepared the prospective comparison.
 
 None of this produces confirmatory accuracy evidence. That can only come from months after
-2026-06 (ADR 0010).
+2026-06 (ADR 0010). After R2, research is frozen unless the owner decides otherwise (ADR 0011).
 
 **What the agent saw of private runs.** Under the owner's data-use instruction (ADR 0009 §3),
 real-data jobs ran on the owner's machine through a blind runner. The agent read only:
@@ -45,12 +45,12 @@ therefore "ran; result private", never a number.
 | G8 | Scenario mechanics | **VERIFIED** | Naive-loop oracles for every feature on hypothetical paths; coupon invariance; monotone response from month 2. Month-1 timing now disclosed (#27) |
 | G9 | Economic probes D1–D3 on the sealed primary run | **DEVELOPMENT-ONLY**: ran 2026-10-30, exit 0, 4 min, 3.9 GB peak | Private `reports/real/r2/diagnostics-primary.json`; not read by the agent |
 | G10 | DEV2017 member trained by clean code and sealed | **VERIFIED** (engineering) | Exit 0, 86 min, 5.7 GB peak, worktree `15911c4` (clean), sealed |
-| G11 | REFIT2026 member trained and sealed | REFIT_STATUS | REFIT_EVIDENCE |
-| G12 | Member implementation verification (boolean invariants) | VERIFY_STATUS | VERIFY_EVIDENCE |
-| G13 | Prospective comparison registered before any later release | REGISTER_STATUS | REGISTER_EVIDENCE |
-| G14 | Rehearsal of the opening (time, memory) | REHEARSE_STATUS | REHEARSE_EVIDENCE |
-| G15 | Rolling-origin development folds (V1) | ROLLING_STATUS | ROLLING_EVIDENCE |
-| G16 | Seed (D7) and loan-sample (D6) stability | STABILITY_STATUS | STABILITY_EVIDENCE |
+| G11 | REFIT2026 member trained and sealed | **IN PROGRESS** (memory rule applied) | The first attempt used the primary run's fraction (2026-11-01, worktree `2a0d4e9`). It fitted M1, then B2's fit ran out of memory (`_ArrayMemoryError` in scikit-learn's multinomial loss gradient). The host had under 1 GB free and was shared with unrelated work. The runner then crashed before writing a status file; it now digests a printed run path only if it exists. Under ADR 0006 §5 / ADR 0010 §1 the next ladder fraction is used: **0.05**, started 2026-11-02 15:44 UTC. The choice depends on memory only |
+| G12 | Member implementation verification (boolean invariants) | **PENDING** (queued after G11) | `experiment verify` on DEV2017 and REFIT2026; the agent reads only `all_pass` and the names of failed checks |
+| G13 | Prospective comparison registered before any later release | **PENDING** (queued after G12) | `forward register` runs only if both members verify. No release after 48 has been downloaded |
+| G14 | Rehearsal of the opening (time, memory) | **PENDING** (queued after G13) | `forward rehearse` on the members' own lock |
+| G15 | Rolling-origin development folds (V1) | **PENDING** (detached queue, starts after G14) | Low priority; `logs/r2/STOP` stops it before its next job |
+| G16 | Seed (D7) and loan-sample (D6) stability | **PENDING** (detached queue, after G15) | As G15 |
 | G17 | House-price and equity proxies | **BLOCKED** (owner decision O3) | Research done: ELTV rejected (proprietary AVM, no as-of guarantee); state HPI has ALFRED vintages from 2008; real-time vs revised 4-quarter HPA differs by up to 3.94 pp. `docs/research/HPI_EQUITY_PROXY.md`, #26 |
 | G18 | Any candidate more accurate than the sealed model (P1–P4, S1–S7); tolerances T1–T6 | **FORWARD-VALIDATION-PENDING** | First opening needs a release with cutoff ≥ 2027-06 |
 | G19 | The sealed primary model is reliable across rate regimes | **FAILED** | Owner-reported from the private packet |
@@ -67,10 +67,12 @@ therefore "ran; result private", never a number.
 | 3 | X1–X3 final payoff probability is not monotone | Small (≤ 3.3e-5/month on synthetic data) but contradicts ADR 0008's table | Reported, not fixed (the pre-registered definitions stand) |
 | 4 | The training sample uses DuckDB `hash()` | The sample is reproducible only under the pinned DuckDB | DuckDB version recorded in experiment manifests |
 | 5 | The primary run manifest predates the `git_dirty` flag | Can't show the sealed primary was trained from a clean tree; its SHA is recorded | Unfixable without retraining; R2 members carry the flag |
-| 6 | Categorical tree encoding loops over rows in Python | Measured 5 s per million rows (synthetic), paid on every fit and prediction. A modest share of the 86-minute DEV2017 run | Not optimized: the encoder sits on the sealed model's prediction path, and correctness comes first |
-| 7 | Forward evaluation holds every model's predictions for the whole window in memory | Peak at the real opening is unknown until rehearsal | REHEARSAL_DEFECT_STATUS |
+| 6 | Categorical encoding looped over rows in Python | 5 s per million rows (synthetic), on every fit and prediction | **Fixed** in #30: one conversion per distinct value, and a property test shows the output identical to the row loop. Private R2 runs use earlier worktrees, whose outputs are identical |
+| 7 | Forward evaluation holds every model's predictions for the whole window in memory | Peak at the real opening is unknown until rehearsal | Open until G14 reports peak RSS |
 | 8 | The synthetic world has no era effect | CI can't reward or punish H-ERA fixes end to end (only toy known-answer tests can) | Documented |
 | 9 | Only 12 forward months | Two-way coverage about 0.91 under strong month effects | Stated in every forward report |
+| 10 | B2 (multinomial logistic) exceeds host memory at REFIT scale and the primary fraction | REFIT2026 trains on a smaller sample than DEV2017 | Handled by the pre-registered ladder (G11), not by code. B2's fit is scikit-learn's |
+| 11 | The owner's laptop is shared with unrelated work (about 37 GB committed on 15.4 GB) | Wall times, and which ladder fraction fits, depend on unrelated load | Recorded; private jobs run at below-normal priority |
 
 ## Executable local review protocol
 

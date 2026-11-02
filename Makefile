@@ -7,7 +7,7 @@ RUN := $(UV) run --frozen
 DEMO_PRESET ?= ci
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check review lint fmt typecheck test test-finance synth data-lock benchmark research seal evaluate-lockbox synthetic-study demo-bundle demo publication-check
+.PHONY: help setup check review lint fmt typecheck test test-finance synth data-lock benchmark research seal evaluate-lockbox synthetic-study demo-bundle demo static-site publication-check
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
