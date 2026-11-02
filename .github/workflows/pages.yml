@@ -39,6 +39,8 @@ jobs:
           cd web && npm ci --ignore-scripts
       - name: Build the fictional demo bundle (dev preset, the public demo's world)
         run: uv run --frozen prepay --log-level WARNING demo build --out build/demo --preset dev
+      - name: Measure API latency and memory on this runner (informational)
+        run: uv run --frozen prepay --log-level WARNING demo latency --bundle build/demo
       - name: Build the live web UI (the reference for the parity tests)
         run: cd web && npx vite build
       - name: Build the static site (every response checked against the API)

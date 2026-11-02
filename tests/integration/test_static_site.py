@@ -88,3 +88,13 @@ def test_site_has_an_entry_per_route(demo_bundle: Path, tmp_path: Path) -> None:
     assert (site / "data" / "index.json").is_file()
     with pytest.raises(FileNotFoundError, match="no static web build"):
         build_site(demo_bundle, tmp_path / "missing", tmp_path / "other")
+
+
+def test_latency_tool_reports_cold_and_cached_requests(demo_bundle: Path) -> None:
+    from prepay.api.latency import measure_latency
+
+    report = measure_latency(demo_bundle, cold=2, warm=3)
+    assert report["cold_two_scenario_request"]["count"] == 2
+    assert report["cached_two_scenario_request"]["count"] == 3
+    assert report["cached_two_scenario_request"]["p50_ms"] > 0
+    assert report["peak_rss_mib"] > 0

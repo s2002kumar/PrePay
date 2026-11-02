@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 const ROUTES = ["/scenario-lab", "/portfolio", "/model-quality", "/methodology"];
 
 async function waitForProjection(page: import("@playwright/test").Page) {
-  await expect(page.getByText("Cash weighted-average life")).toBeVisible();
+  await expect(page.getByText("Cash weighted-average life", { exact: true })).toBeVisible();
   await expect(page.locator("[aria-busy='true']")).toHaveCount(0);
 }
 

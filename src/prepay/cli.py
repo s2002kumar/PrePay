@@ -449,6 +449,13 @@ def _cmd_demo_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_demo_latency(args: argparse.Namespace) -> int:
+    from prepay.api.latency import measure_latency
+
+    _emit(measure_latency(Path(args.bundle), cold=args.cold, warm=args.warm))
+    return 0
+
+
 def _cmd_demo_static_site(args: argparse.Namespace) -> int:
     from prepay.api.static import build_site
 
@@ -911,6 +918,14 @@ def build_parser() -> argparse.ArgumentParser:
     demo_static.add_argument("--web-dist", default="web/dist-static")
     demo_static.add_argument("--out", default="build/pages-site/PrePay")
     demo_static.set_defaults(handler=_cmd_demo_static_site)
+    demo_latency = demo_sub.add_parser(
+        "latency",
+        help="time cold and cached two-scenario projections through the API; report peak RSS",
+    )
+    demo_latency.add_argument("--bundle", default="build/demo")
+    demo_latency.add_argument("--cold", type=int, default=6)
+    demo_latency.add_argument("--warm", type=int, default=30)
+    demo_latency.set_defaults(handler=_cmd_demo_latency)
 
     serve = sub.add_parser("serve", help="serve the demo API and web UI (fictional data only)")
     serve.add_argument("--bundle", default="build/demo")

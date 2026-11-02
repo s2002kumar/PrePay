@@ -174,7 +174,7 @@ function ComparisonSummary({ a, b, deltas, horizon }: { a: ScenarioOut; b: Scena
   if (sentences.length === 0) return null;
   const [first, ...rest] = sentences;
   return (
-    <p className="comparison" aria-live="polite">
+    <p className="comparison">
       <strong>A: {a.label} · B: {b.label}.</strong> {first}
       {rest.length > 0 ? `; ${rest.join("; ")}.` : "."}
     </p>

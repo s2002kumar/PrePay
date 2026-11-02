@@ -11,7 +11,7 @@ const CASES = [
 ];
 
 async function projected(page: Page) {
-  await expect(page.getByText("Cash weighted-average life")).toBeVisible();
+  await expect(page.getByText("Cash weighted-average life", { exact: true })).toBeVisible();
   await expect(page.locator("[aria-busy='true']")).toHaveCount(0);
 }
 
