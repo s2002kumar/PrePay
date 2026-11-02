@@ -1,3 +1,5 @@
+import { ApiRequestError } from "./errors";
+import { loadStatic, STATIC, staticProject } from "./static";
 import type {
   ApiError,
   Health,
@@ -9,15 +11,7 @@ import type {
   ScenariosResponse,
 } from "./types";
 
-export class ApiRequestError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+export { ApiRequestError };
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -39,17 +33,24 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** GET payloads: the live API, or the same JSON stored by the static export. */
+function get<T>(name: string): Promise<T> {
+  return STATIC ? loadStatic<T>(`api/${name}.json`) : call<T>(`/api/${name}`);
+}
+
 export const api = {
-  health: () => call<Health>("/api/health"),
-  pools: () => call<PoolsResponse>("/api/pools"),
-  scenarios: () => call<ScenariosResponse>("/api/scenarios"),
-  methodology: () => call<Methodology>("/api/methodology"),
-  modelQuality: () => call<ModelQuality>("/api/model-quality"),
+  health: () => get<Health>("health"),
+  pools: () => get<PoolsResponse>("pools"),
+  scenarios: () => get<ScenariosResponse>("scenarios"),
+  methodology: () => get<Methodology>("methodology"),
+  modelQuality: () => get<ModelQuality>("model-quality"),
   project: (request: ProjectionRequest, signal?: AbortSignal) =>
-    call<ProjectionResponse>("/api/project", {
-      method: "POST",
-      body: JSON.stringify(request),
-      headers: { "Content-Type": "application/json" },
-      ...(signal ? { signal } : {}),
-    }),
+    STATIC
+      ? staticProject(request)
+      : call<ProjectionResponse>("/api/project", {
+          method: "POST",
+          body: JSON.stringify(request),
+          headers: { "Content-Type": "application/json" },
+          ...(signal ? { signal } : {}),
+        }),
 };

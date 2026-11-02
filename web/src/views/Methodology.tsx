@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api";
 import { DataTable } from "../components/Figures";
+import { STATIC } from "../static";
 import type { Health, Methodology as Method } from "../types";
 
 const REPO = "https://github.com/s2002kumar/PrePay";
@@ -30,14 +31,19 @@ export function Methodology() {
           <h2>Status</h2>
           <dl className="defs">
             <dt>Public demo</dt>
-            <dd>Running · data class {health.data_class} · artifacts {health.artifact_class}</dd>
+            <dd>
+              {STATIC ? "Static site (precomputed API responses)" : "Running"} · data class {health.data_class} · artifacts{" "}
+              {health.artifact_class} · bundle {health.bundle_digest.slice(0, 12)}
+            </dd>
             <dt>Served model</dt>
             <dd>{health.model} (run {method.model.run_id}, trained on {method.model.trained_on})</dd>
             <dt>Real-data validation</dt>
             <dd>Runs privately on the owner's machine; no real-data result is published here</dd>
             <dt>Projection latency</dt>
             <dd>
-              {health.project_latency_ms
+              {STATIC
+                ? "none: projections were computed by the API when this site was built"
+                : health.project_latency_ms
                 ? `p50 ${health.project_latency_ms.p50.toFixed(0)} ms · p95 ${health.project_latency_ms.p95.toFixed(0)} ms (${health.project_latency_ms.count} recent requests, this instance)`
                 : "no requests sampled yet"}
             </dd>

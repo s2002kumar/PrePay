@@ -11,8 +11,17 @@ export const ROUTES = {
 
 export type Route = (typeof ROUTES)[keyof typeof ROUTES];
 
+/** The site's path prefix: "" when served at the root, "/PrePay" on a project site. */
+const BASE = import.meta.env.BASE_URL.replace(/\/+$/, "");
+
+export function href(route: Route): string {
+  return `${BASE}${route}`;
+}
+
 function currentRoute(): Route {
-  const path = window.location.pathname.replace(/\/+$/, "");
+  let path = window.location.pathname;
+  if (BASE && path.startsWith(BASE)) path = path.slice(BASE.length);
+  path = path.replace(/\/+$/, "");
   const known = Object.values(ROUTES) as string[];
   return (known.includes(path) ? path : ROUTES.lab) as Route;
 }
@@ -31,7 +40,7 @@ export function useRoute(): [Route, URLSearchParams, (route: Route, params?: URL
   }, []);
   const navigate = useCallback((route: Route, params?: URLSearchParams) => {
     const query = params && [...params.keys()].length ? `?${params.toString()}` : "";
-    window.history.pushState(null, "", `${route}${query}`);
+    window.history.pushState(null, "", `${href(route)}${query}`);
     setLocation({ route, params: params ?? new URLSearchParams() });
   }, []);
   return [location.route, location.params, navigate];
