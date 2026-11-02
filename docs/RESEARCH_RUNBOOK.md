@@ -227,3 +227,39 @@ uv run prepay forward evaluate --registry artifacts/forward/adr0010   --data-roo
   never replaces the first one.
 - A new release can't be ingested until its layout is verified and added to
   `prepay.contracts.sflld.RELEASES` (ADR 0002). That's a deliberate stop, not a bug.
+
+## 9. R2: verify, register and rehearse; where the private outputs are
+
+R2 runs the development workflow and prepares the forward test on the owner's machine. Every
+command runs from a clean checkout pinned to one commit, so each manifest records a clean Git SHA.
+Outputs stay under the private root.
+
+```bash
+# Boolean implementation checks of each sealed member (no metric is computed)
+uv run prepay experiment verify --run artifacts/experiments/<DEV2017_run_id> --data-root <data-root> \
+  --lock configs/data.lock.json --preset DEV2017 --out reports/real/r2/verify-dev2017.json
+uv run prepay experiment verify --run artifacts/experiments/<REFIT2026_run_id> --data-root <data-root> \
+  --lock configs/data.lock.json --preset REFIT2026 --out reports/real/r2/verify-refit2026.json
+# Register only if both verifications pass, and before downloading any release after 2026-06
+uv run prepay forward register --ref artifacts/runs/<primary_run_id> \
+  --dev artifacts/experiments/<DEV2017_run_id> --refit artifacts/experiments/<REFIT2026_run_id> \
+  --lock configs/data.lock.json --out artifacts/forward/adr0010
+# Dress rehearsal of the opening: time and memory; its metrics are not evidence
+uv run prepay forward rehearse --registry artifacts/forward/adr0010 --data-root <data-root> \
+  --lock configs/data.lock.json
+```
+
+| Output (private root) | Content | Evidence class |
+|---|---|---|
+| `reports/real/r2/diagnostics-primary.json` (+ `.support.json`) | D1 era encoding, D2 probes of the sealed primary models, D3 support map of every window | development (D3 later windows: feature columns only) |
+| `reports/real/r2/curtailments-development.json` | F1 study through 2019-12 and the decision | development |
+| `reports/real/r2/curtailments-exploratory-opened.json` | F1 study through 2026-06 | exploratory-opened-window (balances, not model scores) |
+| `reports/real/r2/verify-*.json` | Member verification booleans | engineering |
+| `artifacts/forward/adr0010/forward-registration.json` | The write-once registration | pre-registration |
+| `artifacts/forward/adr0010/rehearsals/*.json` | Rehearsal stage times, peak RSS and metrics | rehearsal, not evidence |
+| `artifacts/experiments/development/rolling-origin-*.json` | V1 folds: per-fold metrics, regime calibration, attribution, aggregate | development |
+| `artifacts/experiments/development/stability-*.json` | D6/D7 | development |
+| `logs/r2/status/*.json` | Exit code, wall time, peak RSS and output digests per job | metadata |
+
+The development jobs run in a detached, below-normal-priority process. To stop it before its next
+job, create the empty file `logs/r2/STOP`.
