@@ -1,6 +1,6 @@
 [project]
 name = "prepay"
-version = "0.1.0"
+version = "1.0.0"
 description = "Mortgage cash-flow intelligence: competing-risk payoff models and an audited pool cash-flow engine."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

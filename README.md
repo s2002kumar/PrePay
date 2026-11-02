@@ -6,19 +6,32 @@ active. It then turns those probabilities into an audited cash-flow ledger for h
 pools under interest-rate scenarios.
 
 [![ci](https://github.com/s2002kumar/PrePay/actions/workflows/ci.yml/badge.svg)](https://github.com/s2002kumar/PrePay/actions/workflows/ci.yml)
+[![pages](https://github.com/s2002kumar/PrePay/actions/workflows/pages.yml/badge.svg)](https://github.com/s2002kumar/PrePay/actions/workflows/pages.yml)
 
-> **Status (2026-10-29):** the full system is built and tested on **synthetic data** (M0–M5).
-> **Real-data study run privately, unpublished:** the Freddie Mac Release 48 sample was
-> ingested, audited, trained on and evaluated once on a sealed holdout (ADR 0006). Its results,
-> including failed checks, stay private until the dataset terms have been reviewed. The selected
-> model failed across rate regimes and is **not approved as a reliable forecaster**. A
-> [reliability program](docs/RELIABILITY_PLAN.md) now adds failure diagnostics, economically
-> constrained candidates, applicability warnings, and a one-shot test on months after 2026-06.
-> No improvement is claimed until that test runs.
-> **No hosted demo yet:** hosting needs the owner's approval. The demo runs locally or in
-> Docker. Nothing here claims real-world predictive accuracy. See [docs/STATUS.md](docs/STATUS.md).
+**Public demo: <https://s2002kumar.github.io/PrePay/>**. It shows fictional portfolios and a
+synthetic-trained model. CI builds and verifies the site; it is published once GitHub Pages is
+enabled for this repository (a one-time owner setting, see [STATUS](docs/STATUS.md)). Until
+then, run it locally (below). New here? Start with the
+[five-minute walkthrough](docs/WALKTHROUGH.md).
 
-![Scenario Lab comparing a flat rate path with a −200 bp shock for a fictional 2023 pool](docs/images/scenario-lab.png)
+> **Prepay 1.0 (2026-11-02).** The [1.0 acceptance report](docs/reviews/RELEASE_1.0_ACCEPTANCE.md)
+> records which criteria passed, the evidence for each, and what still blocks release.
+> Public surfaces:
+> - **The public demo** is a static GitHub Pages build. The real API computed every response,
+>   and the build checked each one against it.
+> - **The full app** (custom rate paths, adjustable credit assumptions) runs locally or in Docker
+>   with one command.
+>
+> **Real-data research is separate and private.** The Freddie Mac sample was ingested, trained
+> on and evaluated once on a sealed holdout. The selected model failed across rate regimes and
+> is **not approved as a forecaster**; the results stay unpublished pending a terms review. A
+> pre-registered forward test waits for months after 2026-06
+> ([ADR 0010](docs/decisions/0010-forward-evaluation-preregistration.md)). Research is frozen
+> after R2 ([ADR 0011](docs/decisions/0011-release-1-0-public-surface-and-scope-freeze.md)).
+> **Nothing here claims real-world or commercial forecasting accuracy.** See
+> [docs/STATUS.md](docs/STATUS.md).
+
+![Scenario Lab comparing a flat rate path with a −100 bp shock for a fictional 2023 pool](docs/images/scenario-lab.png)
 
 *Fictional pool, synthetic-trained model (`dev` preset). Not a forecast of real mortgages.*
 
@@ -41,11 +54,12 @@ Prepay makes that timing explicit, with every assumption labeled.
 | Sealed, one-shot holdout + censor-aware cohort backtest | implemented on synthetic data | [VALIDATION_REPORT](docs/VALIDATION_REPORT.md) |
 | Audited cash-flow engine (Decimal oracle, mutation tests) | implemented | [FINANCE_ENGINE](docs/validation/FINANCE_ENGINE.md) |
 | FastAPI + responsive web demo (fictional pools only) | implemented, runs locally and in Docker | [ADR 0005](docs/decisions/0005-public-demo-boundary.md) |
+| Public static site: every response precomputed by the API and checked against it | built and verified in CI from `main`; publishing waits for the owner to enable GitHub Pages | [ADR 0011](docs/decisions/0011-release-1-0-public-surface-and-scope-freeze.md), [Deployment](docs/DEPLOYMENT.md) |
 | Real-data training and validation | **run privately, unpublished** pending terms review; failed checks across rate regimes; not independently reviewed | [Runbook](docs/RESEARCH_RUNBOOK.md), [Status](docs/STATUS.md) |
 | Failure diagnostics (era encoding, economic probes, support maps, stability) and constrained candidates (X1–X3, H1) | built and tested on synthetic data, with known-answer tests; real runs are owner-run | [Plan](docs/RELIABILITY_PLAN.md), [ADR 0009](docs/decisions/0009-reliability-program-protocol.md) |
 | Forward evaluation on months nobody has seen | built; pre-registered; waits for a release with cutoff ≥ 2027-06 | [ADR 0010](docs/decisions/0010-forward-evaluation-preregistration.md) |
 | Applicability verdict, model-family range and credit-as-assumption in every projection | implemented in the demo API and UI | [R1 packet](docs/reviews/R1.md) |
-| Hosted public demo | **blocked**: needs hosting approval | [Deployment](docs/DEPLOYMENT.md) |
+| Hosted live container (custom paths online) | **not hosted**: every free container host needs an owner account | [Deployment](docs/DEPLOYMENT.md) |
 
 ## How it works
 
@@ -101,6 +115,10 @@ make demo                  # http://127.0.0.1:8000
 
 Or `docker build -t prepay-demo . && docker run --rm -p 8000:8000 prepay-demo`.
 
+The public static site is built from the same bundle: `make static-site` (needs `make
+demo-bundle` first), then serve it with `python -m http.server -d build/pages-site` and open
+<http://127.0.0.1:8000/PrePay/>.
+
 Other useful targets: `make synthetic-study` (full research pipeline through the lockbox on
 fictional data), `make benchmark` (wall time / peak RSS per stage), `make publication-check`,
 `make test-finance`. Real data: see the [private research runbook](docs/RESEARCH_RUNBOOK.md).
@@ -114,19 +132,21 @@ fictional data), `make benchmark` (wall time / peak RSS per stage), `make public
 | `transform/` | dbt project (staging → intermediate → marts) with data tests |
 | `src/prepay/features/` | feature contract, scenario state machine, panel reader |
 | `src/prepay/modeling/`, `evaluation/` | models, metrics, selection, seal/lockbox, cohort backtest |
-| `src/prepay/scenarios/`, `api/` | rate scenarios, fictional pools, projection, FastAPI service |
+| `src/prepay/scenarios/`, `api/` | rate scenarios, fictional pools, projection, FastAPI service, static export |
 | `src/prepay/synthetic/` | seeded synthetic SFLLD-format world with known ground truth |
 | `web/` | React UI, Playwright E2E + axe accessibility tests |
 | `docs/` | specification, ADRs, status, validation, benchmarks, review packets |
 
 ## Evidence and engineering standards
 
-CI runs on every PR: lint, strict typing, 360+ Python tests, a finance coverage gate (≥90%), web
-lint/typecheck/tests, Playwright E2E with axe (WCAG 2.1 AA) on every view in light and dark, and
-a publication gate over history and build outputs. CodeQL, Dependabot and secret scanning are on,
+CI runs on every PR: lint, strict typing, 400+ Python tests, a finance coverage gate (≥90%), web
+lint/typecheck/tests, Playwright E2E with axe (WCAG 2.1 AA) on every view in light and dark, a
+static-site build whose pages must show exactly the live app's numbers, and a publication gate
+over history and build outputs. How the pieces fit: [How it works](docs/HOW_IT_WORKS.md). CodeQL, Dependabot and secret scanning are on,
 and `main` requires all checks. Measured baseline: [BENCHMARKS](docs/BENCHMARKS.md). Reviewer
 packets: [M2](docs/reviews/M2.md), [M4](docs/reviews/M4.md), [M5](docs/reviews/M5.md),
-[R1 reliability](docs/reviews/R1.md). All
+[R1 reliability](docs/reviews/R1.md), [R2 quality gates](docs/reviews/R2_QUALITY_GATES.md),
+[1.0 acceptance](docs/reviews/RELEASE_1.0_ACCEPTANCE.md). All
 reviews so far are self-review by the implementing agent; **no independent review has
 happened.**
 

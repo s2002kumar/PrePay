@@ -18,8 +18,12 @@ Getting it wrong means reinvesting early at lower rates, or holding capital long
 - **Quantitative finance:** a pure cash-flow engine (scheduled principal, payoffs, credit exits,
   lagged recoveries, WAL, CPR/PSA) checked against an independent 60-digit Decimal oracle and
   mutation tests. Rate shocks change behavior, never contract coupons.
-- **Product:** a FastAPI service and React UI comparing two rate scenarios for fictional pools,
-  keyboard accessible, mobile responsive, light and dark, tested with Playwright and axe.
+- **Product (Prepay 1.0):** a FastAPI service and React UI comparing two rate scenarios for
+  fictional pools. The UI is keyboard accessible, mobile responsive, light and dark, and tested
+  with Playwright and axe. It names the active model and every assumption, states each
+  scenario's applicability, and reads B against A in plain language. A static public site
+  precomputes the API's responses and is checked against them
+  ([walkthrough](WALKTHROUGH.md)).
 
 **How correctness is shown.** Every major claim has a second, independent check: SQL labels vs a
 plain-Python decision table; dbt features vs a separate state machine; gold features reproducing
@@ -48,12 +52,13 @@ training. So I built a reliability program instead:
 
 No improvement is claimed until that test runs.
 
-**Engineering.** Python 3.12, uv, mypy --strict, ruff, sqlfluff, 270+ Python tests (Hypothesis
-properties, mutation kills), Vitest, Playwright + axe. CI runs synthetic-only with SHA-pinned
+**Engineering.** Python 3.12, uv, mypy --strict, ruff, sqlfluff, 420+ Python tests (Hypothesis
+properties, mutation kills, exact oracles), Vitest, Playwright + axe. CI runs synthetic-only with SHA-pinned
 actions and a read-only token. CodeQL, Dependabot and secret scanning are on; `main` is protected
 with required checks. A publication gate scans tracked files, history and build outputs. The
-container is digest-pinned, non-root, with a health check. Decisions are recorded in eight ADRs.
+container is digest-pinned, non-root, with a health check. Decisions are recorded in eleven ADRs.
 
 **Limitations.** The real-data study ran privately and is unpublished pending a terms review.
-Not hosted yet. Not an MBS valuation or advice tool.
+The public static site is built and verified; it is published once GitHub Pages is enabled. The
+live app with custom rate paths runs locally or in Docker. Not an MBS valuation or advice tool.
 No independent human review has happened yet.
