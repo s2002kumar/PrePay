@@ -48,3 +48,16 @@ export function num(value: number | null | undefined, digits = 4): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "n/a";
   return value.toFixed(digits);
 }
+
+/** Display names of the model families (keys are the API's family names). */
+export const MODEL_NAMES: Record<string, string> = {
+  B0_psa: "B0 PSA benchmark",
+  B1_lookup: "B1 age × incentive lookup",
+  B2_logistic: "B2 multinomial logistic",
+  M1_lightgbm: "M1 LightGBM",
+  selected: "Selected (as sealed)",
+};
+
+export function modelName(family: string): string {
+  return MODEL_NAMES[family] ?? family;
+}

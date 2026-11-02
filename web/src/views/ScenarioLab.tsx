@@ -4,11 +4,13 @@ import { api, ApiRequestError } from "../api";
 import { DataTable, StatTile } from "../components/Figures";
 import { LineChart, type Series } from "../components/LineChart";
 import { StackedColumns } from "../components/StackedColumns";
-import { pct, ratePct, signed, signedUsd, usd, years } from "../format";
-import { replaceParams, scenarioFromCode, scenarioLabel } from "../routing";
-import type { MonthlyRow, PoolSummary, ProjectionResponse, RangeValue, ScenarioOut } from "../types";
+import { modelName, pct, ratePct, signed, signedUsd, usd, years } from "../format";
+import { href, replaceParams, ROUTES, scenarioFromCode, scenarioLabel } from "../routing";
+import { STATIC, STATIC_SCENARIOS } from "../static";
+import type { Deltas, MonthlyRow, PoolSummary, ProjectionResponse, RangeValue, ScenarioOut } from "../types";
 
-const PRESETS = ["flat", "p-200", "p-100", "p100", "p200"];
+// The static site holds a precomputed grid of parallel shifts; the live API computes any path.
+const PRESETS = STATIC ? STATIC_SCENARIOS : ["flat", "p-200", "p-100", "p100", "p200"];
 const HORIZONS = [12, 24, 60, 120, 240, 360];
 
 interface Props {
@@ -40,7 +42,7 @@ function ScenarioPicker({ id, label, code, onChange, allowNone }: {
               {scenarioLabel(p)}
             </option>
           ))}
-          <option value="ramp">Custom: ramp to a rate</option>
+          {!STATIC && <option value="ramp">Custom: ramp to a rate</option>}
           {allowNone && <option value="none">No comparison</option>}
         </select>
       </div>
@@ -138,6 +140,70 @@ function ReliabilityPanel({ scenarios }: { scenarios: ScenarioOut[] }) {
           { header: "Cash WAL", cell: (s) => rangeText(s.model_range?.cash_wal_years, years) },
         ]}
       />
+    </section>
+  );
+}
+
+/** Below this size a difference is reported as "about the same" (display rounding is 0.1). */
+const NEGLIGIBLE_PP = 0.05;
+const NEGLIGIBLE_MONTHS = 0.05;
+
+/** Plain-language reading of B against A, built only from the API's A−B deltas. */
+function ComparisonSummary({ a, b, deltas, horizon }: { a: ScenarioOut; b: ScenarioOut; deltas: Deltas; horizon: number }) {
+  const sentences: string[] = [];
+  const pp12 = deltas.principal_returned_12m_pp;
+  if (pp12 !== null) {
+    sentences.push(
+      Math.abs(pp12) < NEGLIGIBLE_PP
+        ? "Both return about the same share of today's balance in the first 12 months"
+        : `B returns ${Math.abs(pp12).toFixed(1)} pp ${pp12 > 0 ? "less" : "more"} of today's balance in the first 12 months`,
+    );
+  }
+  const wal = deltas.cash_wal_months;
+  if (wal !== null && a.summary.cash_wal_years !== null && b.summary.cash_wal_years !== null) {
+    sentences.push(
+      Math.abs(wal) < NEGLIGIBLE_MONTHS
+        ? "the cash weighted-average life is about the same"
+        : `B's cash weighted-average life is ${Math.abs(wal / 12).toFixed(1)} years ${wal > 0 ? "shorter" : "longer"} (${years(b.summary.cash_wal_years)} vs ${years(a.summary.cash_wal_years)})`,
+    );
+  }
+  const interest = deltas.contractual_interest_accrued_horizon_usd;
+  if (interest !== null && Math.abs(interest) >= 0.5) {
+    sentences.push(`over ${horizon} months B accrues ${usd(Math.abs(interest))} ${interest > 0 ? "less" : "more"} contractual interest`);
+  }
+  if (sentences.length === 0) return null;
+  const [first, ...rest] = sentences;
+  return (
+    <p className="comparison">
+      <strong>A: {a.label} · B: {b.label}.</strong> {first}
+      {rest.length > 0 ? `; ${rest.join("; ")}.` : "."}
+    </p>
+  );
+}
+
+/** The served model and the assumptions every number depends on, always visible. */
+function ModelContext({ result, asOf, asOfRate }: { result: ProjectionResponse; asOf: string; asOfRate: number }) {
+  const a = result.assumptions;
+  return (
+    <section className="context card" aria-label="Active model and assumptions">
+      <div>
+        <span className="context-label">Active model</span>
+        <strong>{modelName(result.model)}</strong>
+        <span className="muted"> · trained on synthetic data · </span>
+        <a href={href(ROUTES.quality)}>how it was chosen</a>
+      </div>
+      <div>
+        <span className="context-label">As of</span>
+        {asOf} · last observed 30-year rate {ratePct(asOfRate)} (synthetic history)
+      </div>
+      <div>
+        <span className="context-label">Credit exits</span>
+        {String(a.credit_exits)}; severity {pct(Number(a.credit_severity), 0)}, recovery after {String(a.recovery_lag_months)} months
+      </div>
+      <div>
+        <span className="context-label">Conventions</span>
+        rates act from month 2 · note rates fixed · curtailments not modeled · undiscounted
+      </div>
     </section>
   );
 }
@@ -250,10 +316,7 @@ export function ScenarioLab({ pools, asOfRate, params }: Props) {
           {copied ? "Link copied" : "Copy share link"}
         </button>
       </div>
-      <p className="muted" style={{ marginTop: -8 }}>
-        As of {pool?.as_of ?? "…"} · last observed (synthetic) 30-year rate {ratePct(asOfRate)} · model{" "}
-        {result?.model ?? "…"} (synthetic-trained)
-      </p>
+      {result && <ModelContext result={result} asOf={pool?.as_of ?? result.as_of} asOfRate={asOfRate} />}
 
       {error && (
         <div className="warning" role="alert">
@@ -275,7 +338,7 @@ export function ScenarioLab({ pools, asOfRate, params }: Props) {
 
       {a && (
         <div className={loading ? "is-loading" : undefined} aria-busy={loading}>
-          <ReliabilityPanel scenarios={b ? [a, b] : [a]} />
+          {b && deltas && <ComparisonSummary a={a} b={b} deltas={deltas} horizon={horizon} />}
           <div className="tiles">
             <StatTile
               label="Cash weighted-average life"
@@ -304,6 +367,7 @@ export function ScenarioLab({ pools, asOfRate, params }: Props) {
             />
           </div>
 
+          <ReliabilityPanel scenarios={b ? [a, b] : [a]} />
           <div className="grid-2">
             <div className="card">
               <header>
@@ -408,7 +472,13 @@ export function ScenarioLab({ pools, asOfRate, params }: Props) {
 
           <details className="drawer card" style={{ marginTop: 16 }}>
             <summary>Assumptions and table view</summary>
-            <div className="controls" style={{ marginTop: 12 }} role="group" aria-label="Credit assumptions">
+            {STATIC && (
+              <p className="muted" style={{ marginBottom: 0 }}>
+                This static site was computed at the default credit assumptions. Run the full app (see the README) to
+                change them or to enter custom rate paths.
+              </p>
+            )}
+            <fieldset className="controls plain" style={{ marginTop: 12 }} disabled={STATIC} aria-label="Credit assumptions">
               <div className="field">
                 <label htmlFor="severity">Credit severity (share of disposed principal lost)</label>
                 <input id="severity" type="number" min={0} max={1} step={0.05} value={severity}
@@ -424,7 +494,7 @@ export function ScenarioLab({ pools, asOfRate, params }: Props) {
                 <input id="lag" type="number" min={0} max={36} step={1} value={lag}
                   onChange={(e) => setLag(Math.min(36, Math.max(0, Math.round(Number(e.target.value)))))} />
               </div>
-            </div>
+            </fieldset>
             <dl className="defs">
               {Object.entries(result.assumptions).map(([k, v]) => (
                 <div key={k} style={{ display: "contents" }}>

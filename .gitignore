@@ -26,6 +26,7 @@ __pycache__/
 htmlcov/
 build/
 dist/
+dist-static/
 *.egg-info/
 
 # dbt

@@ -157,6 +157,7 @@ def create_app(
         responses={422: {"model": ErrorResponse}, 429: {"model": ErrorResponse}},
     )
     app.add_middleware(Guards, limiter=TokenBucket(per_minute), latencies=latencies)
+    app.state.service = service  # for operator tools (prepay demo latency); not an endpoint
 
     @app.exception_handler(RequestValidationError)
     async def invalid(_: Request, exc: RequestValidationError) -> JSONResponse:

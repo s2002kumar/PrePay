@@ -3,16 +3,8 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { DataTable } from "../components/Figures";
 import { LineChart } from "../components/LineChart";
-import { num, pct } from "../format";
+import { MODEL_NAMES as NAMES, num, pct } from "../format";
 import type { ModelMetrics, ModelQuality as Quality } from "../types";
-
-const NAMES: Record<string, string> = {
-  B0_psa: "B0 PSA benchmark",
-  B1_lookup: "B1 age × incentive lookup",
-  B2_logistic: "B2 multinomial logistic",
-  M1_lightgbm: "M1 LightGBM",
-  selected: "Selected (as sealed)",
-};
 
 function monthLabel(index: number): string {
   return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;

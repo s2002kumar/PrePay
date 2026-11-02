@@ -449,6 +449,30 @@ def _cmd_demo_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_demo_latency(args: argparse.Namespace) -> int:
+    from prepay.api.latency import measure_latency
+
+    _emit(measure_latency(Path(args.bundle), cold=args.cold, warm=args.warm))
+    return 0
+
+
+def _cmd_demo_static_site(args: argparse.Namespace) -> int:
+    from prepay.api.static import build_site
+
+    started = time.perf_counter()
+    index = build_site(Path(args.bundle), Path(args.web_dist), Path(args.out))
+    _emit(
+        {
+            "site": Path(args.out).as_posix(),
+            "pools": len(index["pools"]),
+            "scenarios": len(index["scenarios"]),
+            "horizons": len(index["horizons"]),
+            "seconds": round(time.perf_counter() - started, 1),
+        }
+    )
+    return 0
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -885,6 +909,23 @@ def build_parser() -> argparse.ArgumentParser:
     demo_build.add_argument("--out", default="build/demo")
     demo_build.add_argument("--preset", choices=["ci", "dev"], default="ci")
     demo_build.set_defaults(handler=_cmd_demo_build)
+    demo_static = demo_sub.add_parser(
+        "static-site",
+        help="build the static site: precomputed API responses on a fixed scenario grid, "
+        "verified against the live API, plus the static web build",
+    )
+    demo_static.add_argument("--bundle", default="build/demo")
+    demo_static.add_argument("--web-dist", default="web/dist-static")
+    demo_static.add_argument("--out", default="build/pages-site/PrePay")
+    demo_static.set_defaults(handler=_cmd_demo_static_site)
+    demo_latency = demo_sub.add_parser(
+        "latency",
+        help="time cold and cached two-scenario projections through the API; report peak RSS",
+    )
+    demo_latency.add_argument("--bundle", default="build/demo")
+    demo_latency.add_argument("--cold", type=int, default=6)
+    demo_latency.add_argument("--warm", type=int, default=30)
+    demo_latency.set_defaults(handler=_cmd_demo_latency)
 
     serve = sub.add_parser("serve", help="serve the demo API and web UI (fictional data only)")
     serve.add_argument("--bundle", default="build/demo")

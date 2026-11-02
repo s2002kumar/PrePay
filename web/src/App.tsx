@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { api } from "./api";
-import { ROUTES, type Route, useRoute } from "./routing";
+import { href, ROUTES, type Route, useRoute } from "./routing";
 import type { PoolSummary } from "./types";
 import { Methodology } from "./views/Methodology";
 import { ModelQuality } from "./views/ModelQuality";
@@ -73,7 +73,7 @@ export function App() {
           {NAV.map(([r, label]) => (
             <a
               key={r}
-              href={r}
+              href={href(r)}
               aria-current={route === r ? "page" : undefined}
               onClick={(e) => {
                 e.preventDefault();

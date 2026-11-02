@@ -77,5 +77,11 @@ demo-bundle: ## Build the fictional demo bundle (sealed synthetic-trained run) i
 demo: ## Serve the demo API + web UI on http://127.0.0.1:8000 (fictional data only)
 	$(RUN) prepay serve --bundle build/demo --web-dist web/dist
 
+# Static site for GitHub Pages: every response precomputed by the API and checked against it.
+PAGES_BASE ?= /PrePay/
+static-site: ## Build the static demo site from build/demo into build/pages-site (serve: python -m http.server -d build/pages-site)
+	cd web && PREPAY_BASE=$(PAGES_BASE) npx vite build --mode static --outDir dist-static
+	$(RUN) prepay demo static-site --bundle build/demo --web-dist web/dist-static --out build/pages-site$(PAGES_BASE)
+
 publication-check: ## Scan tracked files, history, web build and demo bundle for restricted content
-	$(RUN) prepay publication-check --history --tree web=web/dist --tree demo=build/demo
+	$(RUN) prepay publication-check --history --tree web=web/dist --tree demo=build/demo $(if $(wildcard build/pages-site),--tree pages=build/pages-site)
