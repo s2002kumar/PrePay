@@ -1,0 +1,115 @@
+# Prepay in five minutes: a guided tour
+
+**Live demo: <https://s2002kumar.github.io/PrePay/>** (fictional portfolios, synthetic-trained
+model; nothing to install)
+
+## The pitch (30 seconds)
+
+A 30-year mortgage rarely lasts 30 years: people move and refinance. Whoever holds a pool of
+mortgages needs to know when the principal comes back, because that sets reinvestment risk,
+interest income and duration. The answer depends on where interest rates go.
+
+Prepay answers that question end to end:
+- it reconstructs loan histories from Freddie Mac's loan-level data;
+- it trains models of monthly payoff and credit-exit probabilities;
+- it turns them into an audited monthly cash-flow ledger for any rate scenario;
+- it shows the result in an interactive comparison tool.
+
+It is built like production software: typed, tested against independent oracles, reproducible,
+with every claim scoped to its evidence.
+
+## Try it (3 minutes)
+
+1. **Scenario Lab** (opens by default). The fictional 2023 pool holds loans with roughly 7%
+   coupons. Scenario A keeps rates flat; scenario B drops them 100 bp.
+   - The sentence above the tiles reads B against A in plain language. With lower rates, more
+     borrowers refinance, principal comes back years sooner, and less interest accrues.
+   - The strip above the results names the active model and every assumption the numbers
+     depend on.
+2. **Change the inputs.** Set scenario B to *Parallel +300 bp*: payoffs slow, and the cash
+   weighted-average life stretches from about 7.6 to about 11.9 years. That scenario is flagged
+   **unsupported**, because rates that high are outside the model's training data. Switch the
+   pool to the *2021 low-coupon pool*: its 3% loans are far out of the money, so every scenario
+   is flagged as extrapolating or unsupported. For unsupported ones, the page says to read the
+   model range, not the point values. Every view is a shareable URL.
+3. **Read the Reliability table.** Each scenario gets an applicability verdict: how much of the
+   projected balance lies outside the model's training range. The table also shows the spread
+   across all fitted model families, labeled as disagreement, not a confidence interval.
+4. **Open "Assumptions and table view"** to see the full monthly ledger behind the charts.
+5. **Model quality** shows how the served model was chosen, by a rule fixed before testing, and
+   its one-time sealed holdout result, next to every baseline.
+   **Methodology** defines every number with its unit and formula.
+
+The public site is a static build: every response was computed by the real API and checked
+against it. Custom rate paths and adjustable credit assumptions are in the full app, which runs
+locally with one command (README).
+
+## What is hard here, and how Prepay handles it
+
+- **Look-ahead leakage.** Every feature for month *t* uses only data known at the end of
+  *t−1*. A dbt test enforces it, a deliberately corrupted warehouse proves the test can fail,
+  and a separate Python state machine reproduces every feature for historical and hypothetical
+  paths.
+- **Mislabeled outcomes.** Loan modifications, whole-loan sales and repurchases are censored,
+  never counted as defaults. Fourteen golden cases written from the specification check the SQL
+  and an independent Python labeler.
+- **Money that doesn't add up.** The cash-flow engine is pure arithmetic. Conservation is
+  checked on every projection. The engine matches a 60-digit Decimal oracle and an exact
+  rational oracle, and the tests must catch eight deliberate bugs. The API's numbers are tested
+  to be exactly the engine's.
+- **Fooling yourself with evaluation.** Models are selected on 2018, calibrated on 2019, sealed,
+  then opened once on later years. When the selected model lost to another candidate on that
+  holdout, the report said so and was not rewritten.
+
+## The honest part
+
+On real Freddie Mac data, which is analyzed privately pending a terms review, the selected
+model **failed** across rate regimes:
+- it overpredicted payoffs after rates rose;
+- it underpredicted the 2020–21 refinance wave.
+
+Instead of retuning on the months it had already seen, the project:
+1. diagnosed why: the rates of 2020 were outside anything in training;
+2. added applicability verdicts to every projection;
+3. built economically constrained challenger models;
+4. pre-registered a one-shot test on months nobody has seen yet.
+
+No improvement is claimed until that test runs. The public demo uses a synthetic-trained model
+and makes no real-world accuracy claim.
+
+## Code worth opening
+
+| File | Why |
+|---|---|
+| [`src/prepay/finance/ledger.py`](../src/prepay/finance/ledger.py) | The pure cash-flow engine and its conservation check |
+| [`tests/financial/test_rational_oracle.py`](../tests/financial/test_rational_oracle.py) | Exact-arithmetic oracle: 360 payments retire the balance exactly |
+| [`transform/models/intermediate/int_exit_events.sql`](../transform/models/intermediate/int_exit_events.sql) | How an outcome is dated and labeled, in SQL |
+| [`src/prepay/features/machine.py`](../src/prepay/features/machine.py) | One feature state machine for history and scenarios |
+| [`src/prepay/api/service.py`](../src/prepay/api/service.py) | The projection service: model, assumptions, reliability, model range |
+| [`src/prepay/api/static.py`](../src/prepay/api/static.py) | How the public site is generated and verified against the API |
+| [`web/src/views/ScenarioLab.tsx`](../web/src/views/ScenarioLab.tsx) | The comparison UI |
+| [`docs/decisions/`](decisions/) | Eleven architecture decision records |
+
+## By the numbers
+
+- Python 3.12, strict typing, over 400 Python tests, eleven ADRs.
+- dbt on DuckDB for the data pipeline; scikit-learn and LightGBM for models; FastAPI and React
+  for the product.
+- Every pull request runs:
+  - lint and type checks;
+  - the full test suite on synthetic data;
+  - a finance coverage gate;
+  - browser tests with accessibility checks, on the live app and the static site;
+  - CodeQL;
+  - a scan that blocks restricted data from ever being published.
+
+## Limits, stated plainly
+
+- Portfolios are fictional. The served model is trained on synthetic data.
+- Not a valuation, MBS cash-flow waterfall or investment tool.
+- Partial prepayments (curtailments), delinquency cash timing and servicing aren't modeled.
+- All reviews so far are self-reviews by the implementing agent. No independent review has
+  taken place.
+
+More depth: [How it works](HOW_IT_WORKS.md) · [Validation report](VALIDATION_REPORT.md) ·
+[Status](STATUS.md) · [1.0 acceptance report](reviews/RELEASE_1.0_ACCEPTANCE.md)

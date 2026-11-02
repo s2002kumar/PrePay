@@ -1,5 +1,48 @@
 # Deploying the public demo
 
+Prepay 1.0 has two public surfaces built from the same synthetic bundle (ADR 0011):
+
+| Surface | Where | What it can do |
+|---|---|---|
+| Static site | GitHub Pages, <https://s2002kumar.github.io/PrePay/> once Pages is enabled; built and verified by `pages.yml` on every push to `main` | precomputed responses: 4 pools × 13 scenarios (flat, ±50…±300 bp) × every comparison × 6 horizons, default credit assumptions |
+| Live container | locally (`make demo` or Docker); no public host yet | any flat, parallel or custom path; adjustable credit assumptions |
+
+## Static site (GitHub Pages)
+
+```bash
+make demo-bundle DEMO_PRESET=dev            # the public demo's synthetic world
+(cd web && npm ci --ignore-scripts && npx vite build)   # live build, for the parity tests
+make static-site                            # -> build/pages-site/PrePay/
+python -m http.server 8080 -d build/pages-site          # http://127.0.0.1:8080/PrePay/
+```
+
+`prepay demo static-site` works in four steps:
+1. It asks the API, through a test client on the bundle, for every response on the grid.
+2. It stores each scenario's ledger once.
+3. It rebuilds every covered response from the written files, and fails unless each one equals
+   the API's response exactly.
+4. It copies the static web build (`vite build --mode static`, base `/PrePay/`). It adds an
+   `index.html` per route so that deep links load, plus a `404.html`.
+
+The static build carries its Content-Security-Policy as a meta tag, because Pages can't set
+headers.
+
+Before each deploy, `pages.yml` runs Playwright against the site:
+- for four pool, scenario and horizon cases, the site must show exactly what the live app
+  shows: tiles, the comparison sentence, the reliability table and the monthly ledger table;
+- every grid scenario must load;
+- deep links must return 200;
+- axe must report no serious violations.
+
+The publication gate then scans the site. Only the deploy job has `pages: write` and
+`id-token: write`.
+
+**One-time owner action:** set the repository's Pages source to **GitHub Actions** (Settings →
+Pages). Then re-run the latest `pages` workflow. Enabling Pages publishes a website, so the agent
+doesn't do it. Until then the deploy job fails and the build job still verifies the site.
+
+## Live container
+
 The deployable unit is one container. It serves the web UI and the API from the same origin,
 using **fictional** pools and a **synthetic-trained** model built inside the image. Nothing in
 it is Freddie Mac data, and the build context can't include `data/`, `artifacts/`, `notes/` or
@@ -42,7 +85,8 @@ Base images are pinned by digest. Bump them deliberately (Dependabot proposes up
 proxy (as the image's default command assumes), so rate limiting keys on real client addresses.
 
 Sizing: plan for 1 vCPU and **2 GB RAM** per instance. A warmed `dev` container measured 887 MiB
-resident, which leaves too little headroom at 1 GB. The image is 913 MB: its runtime
+resident, which leaves too little headroom at 1 GB. With 1.0 (`prepay demo latency` on a GitHub
+runner, `dev` bundle), peak RSS was 1,148 MiB after warming and 36 requests. The image is 913 MB: its runtime
 environment carries the package's base dependencies (pyarrow, DuckDB, SciPy, scikit-learn),
 which the API doesn't all need. Splitting them out is a known improvement. Startup precomputes the
 standard scenarios in the background, and `/api/health` reports `cache_warm`.
@@ -57,9 +101,14 @@ docker build -t prepay-demo . && docker run --rm prepay-demo prepay --version
 Confirm that the running app shows the fictional-data notice on every view, and that
 `/api/health` reports `"artifact_class": "synthetic"`.
 
-## Hosting (owner decision)
+## Hosting the live container (owner decision)
 
-No hosting has been set up. Any hosted deploy needs the owner to choose a provider and approve
-any account or cost. Options that run this container unchanged include Google Cloud Run, Fly.io,
-Render and Hugging Face Spaces (Docker). Real-data models must never be deployed without a
-separate license review (SOURCE_RESEARCH, ADR 0005).
+The static site is the public surface. The container isn't hosted, because every host that runs
+it unchanged needs an account the owner must create:
+- Hugging Face Spaces (Docker; its free CPU tier fits the 2 GB sizing);
+- Google Cloud Run (needs a billing account);
+- Fly.io;
+- Render (its free 512 MB tier is below the container's footprint).
+
+No paid resource is used without the owner's authorization. Real-data models must never be
+deployed without a separate license review (SOURCE_RESEARCH, ADR 0005).
