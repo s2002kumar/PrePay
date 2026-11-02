@@ -4,7 +4,7 @@ Public, non-sensitive summary. Status levels: `NOT BUILT` · `IMPLEMENTED-SYNTHE
 tested on synthetic data only) · `VALIDATED-REAL-PRIVATE` (run privately on lawfully obtained
 Freddie Mac files) · `PUBLIC-DEPLOYED` · `BLOCKED`. A green CI run is never a real-data claim.
 
-Last updated: 2026-10-29.
+Last updated: 2026-10-30.
 
 `VALIDATED-REAL-PRIVATE` means the stage was run and checked on the real files privately. It
 records that the check ran, not that every result was favourable. Real-data outcomes, including
@@ -65,6 +65,24 @@ real-data outputs aren't read by the agent (ADR 0009 §3).
 | F1 curtailment feasibility: DDLPI-aware estimator under both servicing conventions, rounding and transition exclusions, pre-declared decision rule | synthetic rule **passes**; real-data rule not run (owner-run); engine still models no curtailments | `prepay.evaluation.curtailment`, `prepay diagnose curtailments`; `tests/unit/test_curtailment.py`, `tests/integration/test_curtailment_study.py`; [CURTAILMENTS.md](validation/CURTAILMENTS.md) |
 | D8 post-mortem on opened windows, F3 cash-flow component report | not built (D8 needs owner-run real data; F3's components are already separate ledger lines) | — |
 | Reviewer packet R1 (implementation and methodology; readiness verdict: **not ready for real-world claims**) | written | [docs/reviews/R1.md](reviews/R1.md) |
+
+## R2: empirical development evidence and audit readiness (2026-10-30)
+
+The gate-by-gate report is `docs/reviews/R2_QUALITY_GATES.md`, with statuses VERIFIED,
+DEVELOPMENT-ONLY, FAILED, BLOCKED and FORWARD-VALIDATION-PENDING. **The forecasting model is not
+shown to be accurate and is not production-ready.** Real-data jobs ran on the owner's machine
+through a blind runner. The agent saw only exit codes, times, memory, digests and the names of
+failed implementation checks (ADR 0009 §3).
+
+| Item | Status | Evidence |
+|---|---|---|
+| Forward-test audit before registration: two-way intervals, regime-scaled T3/T4, quantile-A/E T6, monotonicity reporting, relocatable members, rehearsal, `experiment verify` | done | ADR 0010 amendment 2, `docs/validation/FORWARD_AUDIT.md`, #24 |
+| Independent-oracle audit: 14 spec golden cases, exact rational finance oracle, scenario mechanics | done (agent-authored oracles) | `docs/validation/ORACLE_AUDIT.md`, #25; scenario timing disclosed, #27 |
+| House-price and equity proxies | research done; implementation blocked on O3 | `docs/research/HPI_EQUITY_PROXY.md`, #26 |
+| H1 memory fix (−47% fitting peak) and two-way fold tallies | done | #28, #29 |
+| Private runs (owner machine) | see the R2 report's gates G9–G16 | `logs/r2/status/*.json` (private) |
+| REFIT2026 → verification → registration → rehearsal | in progress: the primary-fraction attempt ran out of host memory in B2; rerun at 0.05 under the memory rule (2026-11-02) | R2 report G11–G14 |
+| `make review` local review protocol | built | `Makefile` |
 
 ## Acceptance gates (SPEC §4)
 

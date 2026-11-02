@@ -7,7 +7,7 @@ RUN := $(UV) run --frozen
 DEMO_PRESET ?= ci
 
 .DEFAULT_GOAL := help
-.PHONY: help setup check lint fmt typecheck test test-finance synth data-lock benchmark research seal evaluate-lockbox synthetic-study demo-bundle demo publication-check
+.PHONY: help setup check review lint fmt typecheck test test-finance synth data-lock benchmark research seal evaluate-lockbox synthetic-study demo-bundle demo static-site publication-check
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -16,6 +16,12 @@ setup: ## Install the pinned Python environment from uv.lock
 	$(UV) sync --frozen
 
 check: lint typecheck test ## Full offline synthetic quality gate (CI runs exactly this)
+
+review: check test-finance ## R2 local review protocol: full gate + the audit evidence, then the publication scan
+	$(RUN) pytest -q tests/integration/test_spec_golden_cases.py tests/financial/test_rational_oracle.py \
+		tests/unit/test_scenario_mechanics.py tests/unit/test_curtailment.py tests/unit/test_inference.py \
+		tests/unit/test_probes.py tests/integration/test_forward.py
+	$(RUN) prepay publication-check
 
 lint: ## Ruff lint/format check and SQLFluff on the dbt project
 	$(RUN) ruff check src tests
