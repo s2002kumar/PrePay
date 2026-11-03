@@ -4,6 +4,18 @@ const PORT = 8765;
 // The static site (make static-site) is tested when PREPAY_STATIC_SITE names its root directory.
 const STATIC_ROOT = process.env.PREPAY_STATIC_SITE;
 const STATIC_PORT = 8766;
+// After a deploy, PREPAY_DEPLOYED_URL names the published site: it is checked in place, with no
+// local servers. Parity with the live app needs the API, so pages.yml runs it before deploying.
+const DEPLOYED = process.env.PREPAY_DEPLOYED_URL;
+
+const deployed = DEPLOYED
+  ? {
+      name: "deployed",
+      use: { ...devices["Desktop Chrome"], baseURL: DEPLOYED.endsWith("/") ? DEPLOYED : `${DEPLOYED}/` },
+      testMatch: /static/,
+      grepInvert: /live API computes/,
+    }
+  : undefined;
 
 export default defineConfig({
   testDir: "e2e",
@@ -14,7 +26,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: { baseURL: `http://127.0.0.1:${PORT}`, trace: "retain-on-failure" },
-  projects: [
+  projects: deployed ? [deployed] : [
     { name: "desktop", use: { ...devices["Desktop Chrome"] }, testIgnore: /screenshots|static/ },
     { name: "screenshots", use: { ...devices["Desktop Chrome"] }, testMatch: /screenshots/ },
     ...(STATIC_ROOT
@@ -27,7 +39,7 @@ export default defineConfig({
         ]
       : []),
   ],
-  webServer: [
+  webServer: deployed ? [] : [
     {
       command: `uv run --frozen prepay serve --bundle build/demo --web-dist web/dist --port ${PORT}`,
       cwd: "..",

@@ -1,6 +1,7 @@
 # Builds the public static demo (fictional pools, synthetic-trained model) and deploys it to
 # GitHub Pages. The build checks every precomputed response against the live API, and the e2e
-# step checks that the static site shows the same numbers as the live app. Synthetic only.
+# step checks that the static site shows the same numbers as the live app. After the deploy, the
+# verify job checks the published site in a browser. Synthetic only.
 name: pages
 
 on:
@@ -66,6 +67,32 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  # The build job tested these bytes on a local server; this checks the published site itself.
+  verify:
+    name: verify deployed site
+    needs: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install the locked web environment and Chromium
+        run: |
+          cd web && npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Every scenario, deep links, navigation and accessibility on the published site
+        env:
+          PREPAY_DEPLOYED_URL: ${{ needs.deploy.outputs.page_url }}
+        run: cd web && npx playwright test --project deployed
