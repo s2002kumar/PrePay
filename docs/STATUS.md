@@ -94,7 +94,8 @@ failed implementation checks (ADR 0009 §3).
 | House-price and equity proxies | research done; implementation blocked on O3 | `docs/research/HPI_EQUITY_PROXY.md`, #26 |
 | H1 memory fix (−47% fitting peak) and two-way fold tallies | done | #28, #29 |
 | Private runs (owner machine) | see the R2 report's gates G9–G16 | `logs/r2/status/*.json` (private) |
-| REFIT2026 → verification → registration → rehearsal | in progress: the primary-fraction attempt ran out of host memory in B2; rerun at 0.05 under the memory rule (2026-11-02) | R2 report G11–G14 |
+| REFIT2026 → verification → registration → rehearsal | done (2026-11-02): the primary-fraction attempt ran out of host memory in B2, so REFIT2026 trained at 0.05 under the memory rule. Both members verified, the comparison was registered with only release 48 on disk, and the rehearsal peaked at 2.0 GB | R2 report G11–G14 |
+| Rolling-origin folds, then seed and sample stability | in progress (low-priority queue, started 2026-11-03 00:41 UTC) | R2 report G15–G16 |
 | `make review` local review protocol | built | `Makefile` |
 
 ## Acceptance gates (SPEC §4)

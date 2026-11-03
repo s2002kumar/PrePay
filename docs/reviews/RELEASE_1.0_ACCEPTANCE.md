@@ -82,16 +82,15 @@ Documentation, part of the brief:
 
 - **Real-data research** stays private on the owner's machine. Its sealed study is unchanged.
   The selected model failed across rate regimes and is **not approved as a forecaster**.
-- **R2 commitments and the prospective registration** are in progress on the owner's machine,
-  not restarted ([R2 report](R2_QUALITY_GATES.md) G11–G16):
-  - DEV2017 is trained and sealed.
-  - REFIT2026's first attempt ran out of host memory. It is retraining at 0.05 under the
-    pre-registered memory ladder.
-  - Verification, registration and a rehearsal of the opening run automatically afterwards.
-  - Rolling-origin and stability runs follow, at low priority.
-
-  No later Freddie Mac release has been downloaded, so registration still precedes any
-  forward data.
+- **R2 commitments and the prospective registration** ran on the owner's machine without
+  restarting healthy work ([R2 report](R2_QUALITY_GATES.md) G10–G16):
+  - DEV2017 and REFIT2026 are trained and sealed. REFIT2026's first attempt ran out of host
+    memory, so it trained at 0.05 under the pre-registered memory ladder.
+  - Both members passed implementation verification.
+  - The forward comparison was registered on 2026-11-02, with only release 48 on disk, so
+    registration preceded any forward data.
+  - The opening's rehearsal completed, with a 2.0 GB peak.
+  - Rolling-origin and stability runs are in progress, at low priority.
 - **Research freeze:** no new model families, external economic data, experiments or
   infrastructure after R2 without a separate owner decision (ADR 0011).
 
