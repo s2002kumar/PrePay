@@ -22,7 +22,7 @@ listed here blocks release.
 |---|---|
 | Release-blocking defects | **1**: GitHub Pages not enabled (R1 below) |
 | Criteria | AC1–AC9 **PASS** · AC10 **BLOCKED** (R1) |
-| Known non-blocking limitations | 6 (below) |
+| Known non-blocking limitations | 7 (below) |
 
 ## Scope
 
@@ -77,6 +77,7 @@ Documentation, part of the brief:
 | L4 | No independent human review | All reviews, including this one, are agent self-review |
 | L5 | Performance numbers come from shared CI runners and one laptop | Not a capacity benchmark. The container sizing guidance (DEPLOYMENT) is unchanged |
 | L6 | In the live app, a comparison of two new custom paths takes about 7 s | Each uncached request projects 900 loans × about 370 months for every fitted model family, to show the model-family range. The UI keeps the previous result visible, dimmed, while it loads. Standard scenarios are cached (7 ms). The public static site is precomputed and unaffected |
+| L7 | One open Dependabot alert: `minimatch` 10.2.6, [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249), medium (denial of service from crafted glob patterns), fixed only in 11.0.1 | Development-only: pulled in by `eslint` and `typescript-eslint`, which accept only 10.x, and never fed untrusted patterns. Not in the shipped site's bundle. The engineering standard blocks known exploitable high or critical vulnerabilities. Dependabot's TypeScript 7 bump (#34) fails dependency resolution, because `typescript-eslint` supports TypeScript below 6.1, so it stays unmerged |
 
 ## Separate tracks (not product criteria)
 
