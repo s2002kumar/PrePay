@@ -1,28 +1,30 @@
 # Prepay 1.0 acceptance report
 
-Prepared 2026-11-02 by the implementing agent. **Self-review, not independent review.**
+Prepared 2026-11-02 and updated after the deploy the same day, by the implementing agent. **Self-review, not independent review.**
 Synthetic data only: nothing here measures real-world or commercial forecasting accuracy.
 
 ## Verdict
 
-**Is the engineering product finished? Not yet released: one release-blocking defect
-remains.**
-- **Passed:** AC1–AC9, everything except public deployment. That covers the workflows,
-  financial parity with the audited engine, UI, accessibility, performance, clarity, the
-  data boundary, the clean-setup demonstration and the documentation.
-- **Blocked:** AC10, public deployment. The static site is built on every push to `main`,
-  checked against the API and the live app, and scanned by the publication gate. It can't be
-  published until GitHub Pages is enabled on the repository. That one-time setting creates a
-  public website, so it belongs to the owner, and the agent's permissions refused it.
+**Is the engineering product finished? Yes. Prepay 1.0, the synthetic-only engineering product,
+passes all ten criteria and is publicly deployed at <https://s2002kumar.github.io/PrePay/>.**
+- **Passed:** AC1–AC10. That covers the workflows, financial parity with the audited engine,
+  UI, accessibility, performance, clarity, the data boundary, the clean-setup demonstration,
+  the documentation and the free public deployment.
+- **Release-blocking defects:** none. The first version of this report had one: GitHub Pages
+  was not enabled (R1). It was resolved when Pages was enabled and the `pages` workflow deployed
+  `a9b8b68`.
 
-Once Pages is enabled and the `pages` workflow re-runs, AC10 can be confirmed. Then nothing
-listed here blocks release.
+"Finished" covers the engineering product only. Two parts of the wider project stay open:
+- the real-data forward test can't report before a release with cutoff ≥ 2027-06;
+- the live app with custom paths isn't hosted (L1).
+
+Nothing here measures forecasting accuracy.
 
 | | |
 |---|---|
-| Release-blocking defects | **1**: GitHub Pages not enabled (R1 below) |
-| Criteria | AC1–AC9 **PASS** · AC10 **BLOCKED** (R1) |
-| Known non-blocking limitations | 6 (below) |
+| Release-blocking defects | **0** (R1 resolved 2026-11-02) |
+| Criteria | AC1–AC10 **PASS** |
+| Known non-blocking limitations | 7 (below) |
 
 ## Scope
 
@@ -50,7 +52,7 @@ are not product criteria (ADR 0011).
 | AC7 | **Understandable** | PASS | Every displayed metric has a unit and a formula (Methodology page, `/api/methodology`). Explanations are in the [walkthrough](../WALKTHROUGH.md) and [How it works](../HOW_IT_WORKS.md). Fictional-data notice on every view (Playwright); data class and notice in API responses (`test_api.py`) |
 | AC8 | **Synthetic-only boundary and security** | PASS | The bundle loader refuses non-synthetic or unsealed runs (`test_bundle_guards`). The publication gate covers tracked files, history, web build, demo bundle and the static site (CI `e2e`, `pages.yml`, `test_static_data_passes_the_publication_gate`). Also: CSP (header live, meta static), strict schemas, body cap, rate limit, CodeQL, SHA-pinned actions, read-only default token |
 | AC9 | **Works from a clean setup** | PASS | Each CI run starts from a clean checkout and the lockfiles: `make setup` → `make check` (421 passed) → `make test-finance` → demo bundle → web build → static site → 25 browser tests. `docker.yml` builds the image from a clean context, waits for health and scans the image filesystem. Run [41487102350](https://github.com/s2002kumar/PrePay/actions/runs/41487102350) on `d4abb1d`: built in 3 min 40 s (`ci` preset), `/api/health` ok with `artifact_class: synthetic`, UI 200, image scan 0 findings |
-| AC10 | **Deployed with no paid resources** | **BLOCKED** (R1); build and verification pass | `pages.yml` on `main`, run [41487102389](https://github.com/s2002kumar/PrePay/actions/runs/41487102389) on `d4abb1d`: build job **success**. It built the `dev` bundle (16.5 min), exported and verified all 4,368 responses (248 s), passed the 7 static-vs-live browser tests and the publication gate, and uploaded the 13 MB site. The deploy job failed with *"Ensure GitHub Pages has been enabled"* (R1). No paid service, account or secret is used |
+| AC10 | **Deployed with no paid resources** | PASS | Live at <https://s2002kumar.github.io/PrePay/>. `pages.yml` run [41493908359](https://github.com/s2002kumar/PrePay/actions/runs/41493908359) on `a9b8b68`. Its build job built the `dev` bundle, exported and verified all 4,368 responses, passed the static-vs-live browser tests and the publication gate, and uploaded the site. Its deploy job succeeded at 2026-11-02 23:37 UTC. Every route (`/`, `portfolio`, `scenario-lab`, `model-quality`, `methodology`) and the data files return 200 over HTTPS. All 90 published files are byte-identical (SHA-256) to that run's verified artifact. From this update on, a `verify` job also runs the browser checks against the published URL after every deploy. GitHub Pages and Actions are free for a public repository; no paid service, account or secret is used. The first deploy attempt, run [41487102389](https://github.com/s2002kumar/PrePay/actions/runs/41487102389), failed only because Pages was not yet enabled |
 
 Documentation, part of the brief:
 - final [README](../../README.md);
@@ -61,11 +63,11 @@ Documentation, part of the brief:
 
 ## What remains
 
-### Release-blocking (1)
+### Release-blocking (0)
 
 | # | Defect | Effect | Resolution |
 |---|---|---|---|
-| R1 | GitHub Pages is not enabled for the repository | The verified static site isn't published, so there is no public URL yet | **Owner:** Settings → Pages → Source: *GitHub Actions*, then re-run the latest `pages` workflow. Free for a public repository |
+| R1 | GitHub Pages was not enabled for the repository | The verified static site wasn't published | **Resolved 2026-11-02.** Pages was set to deploy from GitHub Actions, and run 41493908359 deployed the verified site |
 
 ### Known limitations (not release-blocking)
 
@@ -77,21 +79,21 @@ Documentation, part of the brief:
 | L4 | No independent human review | All reviews, including this one, are agent self-review |
 | L5 | Performance numbers come from shared CI runners and one laptop | Not a capacity benchmark. The container sizing guidance (DEPLOYMENT) is unchanged |
 | L6 | In the live app, a comparison of two new custom paths takes about 7 s | Each uncached request projects 900 loans × about 370 months for every fitted model family, to show the model-family range. The UI keeps the previous result visible, dimmed, while it loads. Standard scenarios are cached (7 ms). The public static site is precomputed and unaffected |
+| L7 | One open Dependabot alert: `minimatch` 10.2.6, [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249), medium (denial of service from crafted glob patterns), fixed only in 11.0.1 | Development-only: pulled in by `eslint` and `typescript-eslint`, which accept only 10.x, and never fed untrusted patterns. Not in the shipped site's bundle. The engineering standard blocks known exploitable high or critical vulnerabilities. Dependabot's TypeScript 7 bump (#34) fails dependency resolution, because `typescript-eslint` supports TypeScript below 6.1, so it stays unmerged |
 
 ## Separate tracks (not product criteria)
 
 - **Real-data research** stays private on the owner's machine. Its sealed study is unchanged.
   The selected model failed across rate regimes and is **not approved as a forecaster**.
-- **R2 commitments and the prospective registration** are in progress on the owner's machine,
-  not restarted ([R2 report](R2_QUALITY_GATES.md) G11–G16):
-  - DEV2017 is trained and sealed.
-  - REFIT2026's first attempt ran out of host memory. It is retraining at 0.05 under the
-    pre-registered memory ladder.
-  - Verification, registration and a rehearsal of the opening run automatically afterwards.
-  - Rolling-origin and stability runs follow, at low priority.
-
-  No later Freddie Mac release has been downloaded, so registration still precedes any
-  forward data.
+- **R2 commitments and the prospective registration** ran on the owner's machine without
+  restarting healthy work ([R2 report](R2_QUALITY_GATES.md) G10–G16):
+  - DEV2017 and REFIT2026 are trained and sealed. REFIT2026's first attempt ran out of host
+    memory, so it trained at 0.05 under the pre-registered memory ladder.
+  - Both members passed implementation verification.
+  - The forward comparison was registered on 2026-11-02, with only release 48 on disk, so
+    registration preceded any forward data.
+  - The opening's rehearsal completed, with a 2.0 GB peak.
+  - Rolling-origin and stability runs are in progress, at low priority.
 - **Research freeze:** no new model families, external economic data, experiments or
   infrastructure after R2 without a separate owner decision (ADR 0011).
 

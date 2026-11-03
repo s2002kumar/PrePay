@@ -4,7 +4,7 @@ Prepay 1.0 has two public surfaces built from the same synthetic bundle (ADR 001
 
 | Surface | Where | What it can do |
 |---|---|---|
-| Static site | GitHub Pages, <https://s2002kumar.github.io/PrePay/> once Pages is enabled; built and verified by `pages.yml` on every push to `main` | precomputed responses: 4 pools × 13 scenarios (flat, ±50…±300 bp) × every comparison × 6 horizons, default credit assumptions |
+| Static site | GitHub Pages, <https://s2002kumar.github.io/PrePay/>; built, verified, deployed and re-checked by `pages.yml` on every push to `main` | precomputed responses: 4 pools × 13 scenarios (flat, ±50…±300 bp) × every comparison × 6 horizons, default credit assumptions |
 | Live container | locally (`make demo` or Docker); no public host yet | any flat, parallel or custom path; adjustable credit assumptions |
 
 ## Static site (GitHub Pages)
@@ -37,9 +37,10 @@ Before each deploy, `pages.yml` runs Playwright against the site:
 The publication gate then scans the site. Only the deploy job has `pages: write` and
 `id-token: write`.
 
-**One-time owner action:** set the repository's Pages source to **GitHub Actions** (Settings →
-Pages). Then re-run the latest `pages` workflow. Enabling Pages publishes a website, so the agent
-doesn't do it. Until then the deploy job fails and the build job still verifies the site.
+After the deploy, the `verify` job runs the same browser checks against the published URL,
+except parity with the live app, which needs the API (`playwright test --project deployed`
+with `PREPAY_DEPLOYED_URL`). Pages is set to deploy from **GitHub Actions** (Settings → Pages), a
+one-time repository setting.
 
 ## Live container
 

@@ -59,6 +59,6 @@ with required checks. A publication gate scans tracked files, history and build 
 container is digest-pinned, non-root, with a health check. Decisions are recorded in eleven ADRs.
 
 **Limitations.** The real-data study ran privately and is unpublished pending a terms review.
-The public static site is built and verified; it is published once GitHub Pages is enabled. The
+The public static site is live at <https://s2002kumar.github.io/PrePay/>. The
 live app with custom rate paths runs locally or in Docker. Not an MBS valuation or advice tool.
 No independent human review has happened yet.
