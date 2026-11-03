@@ -9,10 +9,9 @@ pools under interest-rate scenarios.
 [![pages](https://github.com/s2002kumar/PrePay/actions/workflows/pages.yml/badge.svg)](https://github.com/s2002kumar/PrePay/actions/workflows/pages.yml)
 
 **Public demo: <https://s2002kumar.github.io/PrePay/>**. It shows fictional portfolios and a
-synthetic-trained model. CI builds and verifies the site; it is published once GitHub Pages is
-enabled for this repository (a one-time owner setting, see [STATUS](docs/STATUS.md)). Until
-then, run it locally (below). New here? Start with the
-[five-minute walkthrough](docs/WALKTHROUGH.md).
+synthetic-trained model. CI verifies the site against the API before each deploy and checks
+the published site in a browser after it. Custom rate paths need the live app, which runs
+locally (below). New here? Start with the [five-minute walkthrough](docs/WALKTHROUGH.md).
 
 > **Prepay 1.0 (2026-11-02).** The [1.0 acceptance report](docs/reviews/RELEASE_1.0_ACCEPTANCE.md)
 > records which criteria passed, the evidence for each, and what still blocks release.
@@ -54,7 +53,7 @@ Prepay makes that timing explicit, with every assumption labeled.
 | Sealed, one-shot holdout + censor-aware cohort backtest | implemented on synthetic data | [VALIDATION_REPORT](docs/VALIDATION_REPORT.md) |
 | Audited cash-flow engine (Decimal oracle, mutation tests) | implemented | [FINANCE_ENGINE](docs/validation/FINANCE_ENGINE.md) |
 | FastAPI + responsive web demo (fictional pools only) | implemented, runs locally and in Docker | [ADR 0005](docs/decisions/0005-public-demo-boundary.md) |
-| Public static site: every response precomputed by the API and checked against it | built and verified in CI from `main`; publishing waits for the owner to enable GitHub Pages | [ADR 0011](docs/decisions/0011-release-1-0-public-surface-and-scope-freeze.md), [Deployment](docs/DEPLOYMENT.md) |
+| Public static site: every response precomputed by the API and checked against it | live at <https://s2002kumar.github.io/PrePay/>; built, verified and deployed by `pages.yml` from `main`, then checked in a browser | [ADR 0011](docs/decisions/0011-release-1-0-public-surface-and-scope-freeze.md), [Deployment](docs/DEPLOYMENT.md) |
 | Real-data training and validation | **run privately, unpublished** pending terms review; failed checks across rate regimes; not independently reviewed | [Runbook](docs/RESEARCH_RUNBOOK.md), [Status](docs/STATUS.md) |
 | Failure diagnostics (era encoding, economic probes, support maps, stability) and constrained candidates (X1–X3, H1) | built and tested on synthetic data, with known-answer tests; real runs are owner-run | [Plan](docs/RELIABILITY_PLAN.md), [ADR 0009](docs/decisions/0009-reliability-program-protocol.md) |
 | Forward evaluation on months nobody has seen | built; pre-registered; waits for a release with cutoff ≥ 2027-06 | [ADR 0010](docs/decisions/0010-forward-evaluation-preregistration.md) |

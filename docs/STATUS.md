@@ -18,7 +18,7 @@ criterion's evidence and the defects that remain.
 
 | Surface | Status | Where |
 |---|---|---|
-| Static public site (precomputed fictional responses, verified against the API) | IMPLEMENTED-SYNTHETIC: built and verified by `pages.yml` on `main`. Deploy BLOCKED until the owner enables GitHub Pages | <https://s2002kumar.github.io/PrePay/> once enabled |
+| Static public site (precomputed fictional responses, verified against the API) | PUBLIC-DEPLOYED: built, verified and deployed by `pages.yml` from `main` ([41493908359](https://github.com/s2002kumar/PrePay/actions/runs/41493908359), `a9b8b68`); checked in a browser after each deploy | <https://s2002kumar.github.io/PrePay/> |
 | Live app (custom paths, adjustable credit) | IMPLEMENTED-SYNTHETIC: local and Docker; built and health-checked in CI | `make demo`, `Dockerfile`, `docker.yml` |
 | Real-data research and forward test | private and separate; frozen after R2 | sections below |
 
@@ -26,7 +26,6 @@ criterion's evidence and the defects that remain.
 
 | Blocker | Effect | Owner action |
 |---|---|---|
-| GitHub Pages not enabled | The verified static site isn't published | Settings → Pages → Source: **GitHub Actions**, then re-run the latest `pages` workflow (free; public repository) |
 | Freddie Mac terms review for publication | Real-data results stay private (not in this repository, CI or the demo) | Confirm the terms acceptance date and whether a noncommercial aggregate research report may be published |
 | No code license selected | Repository is public but not open-source licensed | Choose a license (or none) |
 | No account for a container host | The live app (custom paths online) isn't hosted; the static site is public | Optional: create a free Hugging Face account (or approve another host) |
@@ -109,7 +108,7 @@ failed implementation checks (ADR 0009 §3).
 | P5 | Sealed future holdouts | VALIDATED-REAL-PRIVATE | seal + one-shot lockbox (tests: reader spy, tamper, second-evaluation refusal); real run sealed and opened once, 2026-10-29 | Not every pre-registered check passed (private packet). The test windows are now opened; a forward-evaluation path for later releases is not built |
 | P6 | Cash-flow conventions + conservation | IMPLEMENTED-SYNTHETIC | `make test-finance`; ADR 0001; `docs/validation/FINANCE_ENGINE.md`; all twelve §6 items tested | Event-timing sensitivity not yet published |
 | P7 | Pooled 12/24m backtests | VALIDATED-REAL-PRIVATE | `src/prepay/evaluation/cohort.py` (incidence + censoring bounds) and `runoff.py` (balance run-off) inside the lockbox; synthetic results in `docs/VALIDATION_REPORT.md` §5 | Real cohort and run-off results private; curtailments not modelled; interest, losses and recoveries not compared (no cash data) |
-| P8 | Interactive demo | IMPLEMENTED-SYNTHETIC: static site built and verified, deploy waits for Pages to be enabled; live app runs locally and in Docker | `src/prepay/api/`, `web/`, ADR 0005 and 0011; CI `e2e` (live app and static site, Playwright + axe), `tests/integration/test_api*.py`, `test_static_site.py` | The live container isn't hosted (needs an owner account); the static site holds a fixed scenario grid |
+| P8 | Interactive demo | PUBLIC-DEPLOYED: static site at <https://s2002kumar.github.io/PrePay/>; live app runs locally and in Docker (IMPLEMENTED-SYNTHETIC) | `src/prepay/api/`, `web/`, ADR 0005 and 0011; CI `e2e` (live app and static site, Playwright + axe), `tests/integration/test_api*.py`, `test_static_site.py` | The live container isn't hosted (needs an owner account); the static site holds a fixed scenario grid |
 | P9 | Licensed-data boundary | IMPLEMENTED-SYNTHETIC | `prepay publication-check` (tracked set in `make check`; history + build outputs in CI `e2e`); synthetic-only bundle loader; allowlist `.dockerignore` | Manual license review needed before any real-data publication |
 | P10 | README, reports, reproducible install | IMPLEMENTED-SYNTHETIC | README, VALIDATION_REPORT, BENCHMARKS, review packets M2/M4/M5, Dockerfile; clean clone of `main` `f8ac9e2` in WSL2 Ubuntu: `make check` 275 passed, `make test-finance` 85 passed (95.60% finance coverage), 2026-10-28 | Real-data results private pending terms review |
 
@@ -122,7 +121,7 @@ failed implementation checks (ADR 0009 §3).
 | M2 Feature store | IMPLEMENTED-SYNTHETIC | dbt silver/gold + Python scenario feature state machine with exact historical parity; benchmark baseline in `docs/BENCHMARKS.md`; reviewer packet `docs/reviews/M2.md` |
 | M3 ML | VALIDATED-REAL-PRIVATE | Models, validation-only selection, cross-fitted calibration, seal/lockbox, segment reports; trained, sealed and opened once on real data privately; results unpublished |
 | M4 Finance engine + freeze | IMPLEMENTED-SYNTHETIC (engine) · VALIDATED-REAL-PRIVATE (freeze, run-off backtest) | Engine, scenarios, pools, projection; reviewer packet `docs/reviews/M4.md`; real freeze and run-off comparison done privately; engine outputs on real loans are not published |
-| M5 Product + publication | IMPLEMENTED-SYNTHETIC (public deploy waits for Pages to be enabled) | API, web UI, publication gate, Docker image, security policy; reviewer packet `docs/reviews/M5.md`; Prepay 1.0 acceptance in `docs/reviews/RELEASE_1.0_ACCEPTANCE.md` |
+| M5 Product + publication | PUBLIC-DEPLOYED (static site); live app IMPLEMENTED-SYNTHETIC, not hosted | API, web UI, publication gate, Docker image, security policy; reviewer packet `docs/reviews/M5.md`; Prepay 1.0 acceptance in `docs/reviews/RELEASE_1.0_ACCEPTANCE.md` |
 
 ## Finance verification detail (FINANCIAL_CONVENTIONS §6)
 
