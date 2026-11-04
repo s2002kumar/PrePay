@@ -61,6 +61,8 @@ the reproducible record. Not merged.
 | `pytest` (the whole Python suite, as `make test`) | 422 passed, 1 skipped (the POSIX file-permission test, skipped on Windows by design) |
 | `pytest tests/financial --cov=prepay.finance --cov-branch --cov-fail-under=90` (`make test-finance`) | 97 passed; finance coverage 95.60% |
 | `npm audit --omit=dev --audit-level=high` | 0 vulnerabilities |
+| `vite build --mode static` + `prepay demo static-site` (every response checked against the API) | built: 4 pools × 13 scenarios × 6 horizons |
+| `prepay publication-check --history --tree web=… --tree demo=… --tree pages=…` | ok, 0 findings |
 
 **Local bundle.** Local evidence used a fresh `ci`-preset bundle built from this branch's code
 (content digest `86e0b72d…`). The `dev`-preset rebuild ran out of memory on this machine. CI's
