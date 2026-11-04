@@ -1,7 +1,8 @@
 # Prepay in five minutes: a guided tour
 
 **Live demo: <https://s2002kumar.github.io/PrePay/>** (fictional portfolios, synthetic-trained
-model; nothing to install)
+model; nothing to install). This walkthrough explains the engineering pipeline;
+its displayed values do **not** establish real-mortgage predictive accuracy.
 
 ## The pitch (30 seconds)
 
@@ -9,11 +10,15 @@ A 30-year mortgage rarely lasts 30 years: people move and refinance. Whoever hol
 mortgages needs to know when the principal comes back, because that sets reinvestment risk,
 interest income and duration. The answer depends on where interest rates go.
 
-Prepay answers that question end to end:
-- it reconstructs loan histories from Freddie Mac's loan-level data;
-- it trains models of monthly payoff and credit-exit probabilities;
-- it turns them into an audited monthly cash-flow ledger for any rate scenario;
-- it shows the result in an interactive comparison tool.
+Prepay implements an end-to-end approach to that question:
+- it ingests SFLLD-format loan histories and builds point-in-time features;
+- it trains competing-risk models of monthly payoff and credit exits;
+- it converts model probabilities into an audited monthly cash-flow ledger;
+- it shows synthetic, hypothetical results in an interactive comparison tool.
+
+The real Freddie Mac study is private and its selected model failed important
+cross-regime validation checks. The public demo is an engineering demonstration,
+not a tested estimate for investing or lending decisions.
 
 It is built like production software: typed, tested against independent oracles, reproducible,
 with every claim scoped to its evidence.
