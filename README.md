@@ -1,9 +1,15 @@
-# Prepay: mortgage cash-flow intelligence
+# Prepay — mortgage cash-flow modeling
 
 **When will a mortgage pool return its principal if rates move?** Prepay models, month by month,
 whether each fixed-rate loan pays off early, exits through a credit disposition, or stays
 active. It then turns those probabilities into an audited cash-flow ledger for hypothetical
 pools under interest-rate scenarios.
+
+**ML and data engineering:** competing-risk modeling with LightGBM, logistic and
+other baselines; point-in-time features, temporal validation, streaming ingest,
+dbt transformations, and an auditable finance engine. The public model and
+demo are synthetic. A separately evaluated real-data model did not pass
+rate-regime checks, so this is **not a validated forecasting system**.
 
 [![ci](https://github.com/s2002kumar/PrePay/actions/workflows/ci.yml/badge.svg)](https://github.com/s2002kumar/PrePay/actions/workflows/ci.yml)
 [![pages](https://github.com/s2002kumar/PrePay/actions/workflows/pages.yml/badge.svg)](https://github.com/s2002kumar/PrePay/actions/workflows/pages.yml)
