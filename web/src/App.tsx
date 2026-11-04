@@ -17,7 +17,7 @@ const NAV: [Route, string][] = [
 
 type Theme = "system" | "light" | "dark";
 
-function useTheme(): [Theme, () => void] {
+function useTheme(): [Theme, (theme: Theme) => void] {
   const [theme, setTheme] = useState<Theme>(() => {
     try {
       const stored = window.localStorage.getItem("prepay-theme");
@@ -36,16 +36,21 @@ function useTheme(): [Theme, () => void] {
       // storage unavailable (private mode): the theme still applies for this visit
     }
   }, [theme]);
-  const cycle = () => setTheme((t) => (t === "system" ? "light" : t === "light" ? "dark" : "system"));
-  return [theme, cycle];
+  return [theme, setTheme];
 }
+
+const THEMES: [Theme, string][] = [
+  ["system", "Auto"],
+  ["light", "Light"],
+  ["dark", "Dark"],
+];
 
 export function App() {
   const [route, params, navigate] = useRoute();
   const [pools, setPools] = useState<PoolSummary[] | null>(null);
   const [asOfRate, setAsOfRate] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [theme, cycleTheme] = useTheme();
+  const [theme, setTheme] = useTheme();
 
   useEffect(() => {
     Promise.all([api.pools(), api.scenarios()])
@@ -64,35 +69,56 @@ export function App() {
   return (
     <div className="shell">
       <a className="skip-link" href="#main">Skip to content</a>
-      <header className="top">
-        <div className="brand">
-          <strong>Prepay</strong>
-          <span>Mortgage cash-flow intelligence</span>
+      <header className="topbar">
+        <div className="topbar-inner">
+          <a
+            className="brand"
+            href={href(ROUTES.lab)}
+            onClick={(e) => {
+              e.preventDefault();
+              navigate(ROUTES.lab);
+            }}
+          >
+            <svg className="brand-mark" width="22" height="22" viewBox="0 0 22 22" aria-hidden="true" focusable="false">
+              <rect x="1" y="1" width="20" height="20" rx="5" fill="currentColor" />
+              <path d="M6 15.5V9.5M10 15.5V6.5M14 15.5V11M17.5 15.5v-2.5" stroke="var(--surface)" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <strong>Prepay</strong>
+            <span className="brand-sub">Mortgage cash-flow analytics</span>
+          </a>
+          <nav className="tabs" aria-label="Sections">
+            {NAV.map(([r, label]) => (
+              <a
+                key={r}
+                href={href(r)}
+                aria-current={route === r ? "page" : undefined}
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate(r);
+                }}
+              >
+                {label}
+              </a>
+            ))}
+          </nav>
+          <div className="segmented theme" role="group" aria-label="Color theme">
+            {THEMES.map(([t, label]) => (
+              <button key={t} type="button" aria-pressed={theme === t} onClick={() => setTheme(t)}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-        <nav className="tabs" aria-label="Sections">
-          {NAV.map(([r, label]) => (
-            <a
-              key={r}
-              href={href(r)}
-              aria-current={route === r ? "page" : undefined}
-              onClick={(e) => {
-                e.preventDefault();
-                navigate(r);
-              }}
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
-        <button type="button" onClick={cycleTheme} aria-label={`Color theme: ${theme}. Change theme`}>
-          Theme: {theme}
-        </button>
       </header>
       <div className="notice" role="note">
-        <span aria-hidden="true">ⓘ</span>
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+          <path d="M8 7.2v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          <circle cx="8" cy="4.9" r="0.9" fill="currentColor" />
+        </svg>
         <span>
           <strong>Fictional portfolios, synthetic-trained model.</strong> Nothing here is Freddie Mac data, a forecast of real
-          mortgages, or financial advice. Real-data validation is pending.
+          mortgages, or financial advice. Real-data results are evaluated privately and not published.
         </span>
       </div>
       <main id="main" tabIndex={-1}>
@@ -109,7 +135,10 @@ export function App() {
       </main>
       <footer className="foot">
         Prepay research demo · all portfolios fictional · rate paths are hypothetical, not forecasts · no discounting or
-        valuation.
+        valuation ·{" "}
+        <a href="https://github.com/s2002kumar/PrePay" rel="noreferrer">
+          source, tests and validation reports
+        </a>
       </footer>
     </div>
   );

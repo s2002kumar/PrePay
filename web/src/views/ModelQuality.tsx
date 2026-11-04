@@ -4,7 +4,7 @@ import { api } from "../api";
 import { DataTable } from "../components/Figures";
 import { LineChart } from "../components/LineChart";
 import { MODEL_NAMES as NAMES, num, pct } from "../format";
-import type { ModelMetrics, ModelQuality as Quality } from "../types";
+import type { Methodology, ModelMetrics, ModelQuality as Quality } from "../types";
 
 function monthLabel(index: number): string {
   return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
@@ -12,9 +12,11 @@ function monthLabel(index: number): string {
 
 export function ModelQuality() {
   const [data, setData] = useState<Quality | null>(null);
+  const [method, setMethod] = useState<Methodology | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api.modelQuality().then(setData).catch(() => setError("Model quality data is unavailable."));
+    api.methodology().then(setMethod).catch(() => setMethod(null));
   }, []);
   if (error) return <div className="warning" role="alert">{error}</div>;
   if (!data) return <p aria-busy="true">Loading model quality…</p>;
@@ -38,8 +40,37 @@ export function ModelQuality() {
   return (
     <section aria-labelledby="quality-title">
       <h1 id="quality-title">Model quality</h1>
+      <p className="lede">
+        How the served model was chosen, and how every candidate scored on held-out synthetic months it never saw. These
+        results test the pipeline and the method; they are not evidence of accuracy on real mortgages.
+      </p>
       <div className="warning" role="note">
         <strong>Synthetic results only.</strong> {data.notice} {data.real_data_status}
+      </div>
+
+      <div className="grid-2" style={{ marginBottom: 16 }}>
+        <div className="card">
+          <h2>What this evidence shows</h2>
+          <ul className="limits">
+            <li>
+              The served model ({NAMES[selected] ?? selected}) was selected on validation data only: {data.selection.rule}.
+            </li>
+            <li>
+              {windows.length} sealed holdout window{windows.length === 1 ? "" : "s"} ({windows.map(([, r]) => r.label).join(", ")}),
+              each evaluated once after the run was sealed; every model is reported, including baselines that won.
+            </li>
+            <li>Cohort run-off is compared with a censor-adjusted realized curve and its bootstrap interval.</li>
+          </ul>
+        </div>
+        <div className="card">
+          <h2>What it does not show</h2>
+          <ul className="limits" data-testid="quality-limits">
+            {(method?.limitations ?? []).slice(0, 2).map((l) => (
+              <li key={l}>{l}</li>
+            ))}
+            <li>{data.real_data_status}</li>
+          </ul>
+        </div>
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
