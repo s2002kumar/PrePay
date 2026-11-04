@@ -168,7 +168,11 @@ class ProjectionService:
             values = [s[metric] for s in summaries.values() if s[metric] is not None]
             return RangeValue(min=min(values, default=None), max=max(values, default=None))
 
-        names = [self.model_name if key == SELECTED else key for key in summaries]
+        # The selected model belongs to one of the families, so each family is named once; the
+        # spread above is still taken over every projected member, selected model included.
+        names = list(
+            dict.fromkeys(self.model_name if key == SELECTED else key for key in summaries)
+        )
         return ModelRange(models=names, **{m: spread(m) for m in RANGE_METRICS}, note=RANGE_NOTE)
 
     def _scenario_out(
