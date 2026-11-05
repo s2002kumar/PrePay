@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, ApiRequestError } from "../api";
-import { DataTable, StatTile } from "../components/Figures";
-import { LineChart, type Series } from "../components/LineChart";
-import { StackedColumns } from "../components/StackedColumns";
-import { modelName, pct, ratePct, signed, signedUsd, usd, years } from "../format";
-import { href, replaceParams, ROUTES, scenarioFromCode, scenarioLabel } from "../routing";
-import { STATIC, STATIC_SCENARIOS } from "../static";
-import type { Deltas, MonthlyRow, PoolSummary, ProjectionResponse, RangeValue, ScenarioOut } from "../types";
-
-// The static site holds a precomputed grid of parallel shifts; the live API computes any path.
-const PRESETS = STATIC ? STATIC_SCENARIOS : ["flat", "p-200", "p-100", "p100", "p200"];
-const HORIZONS = [12, 24, 60, 120, 240, 360];
+import { clampMonth, compare, sideView } from "../derive";
+import { modelName, pct, ratePct, usd } from "../format";
+import { href, replaceParams, ROUTES, scenarioFromCode } from "../routing";
+import type { Methodology, PoolSummary, ProjectionResponse } from "../types";
+import { Composer } from "./lab/Composer";
+import { Composition } from "./lab/Composition";
+import { Drivers } from "./lab/Drivers";
+import { Outcome } from "./lab/Outcome";
+import { FullTable, Ledger } from "./lab/Tables";
+import { Inspector, PrincipalChart } from "./lab/Timeline";
+import { Trust } from "./lab/Trust";
 
 interface Props {
   pools: PoolSummary[];
@@ -19,191 +19,55 @@ interface Props {
   params: URLSearchParams;
 }
 
-function ScenarioPicker({ id, label, code, onChange, allowNone }: {
-  id: string;
-  label: string;
-  code: string;
-  onChange: (code: string) => void;
-  allowNone: boolean;
-}) {
-  const isRamp = code.startsWith("ramp:");
-  const [, target = "5.00", length = "12"] = isRamp ? code.split(":") : [];
-  return (
-    <>
-      <div className="field">
-        <label htmlFor={id}>{label}</label>
-        <select
-          id={id}
-          value={isRamp ? "ramp" : code}
-          onChange={(e) => onChange(e.target.value === "ramp" ? "ramp:5.00:12" : e.target.value)}
-        >
-          {PRESETS.map((p) => (
-            <option key={p} value={p}>
-              {scenarioLabel(p)}
-            </option>
-          ))}
-          {!STATIC && <option value="ramp">Custom: ramp to a rate</option>}
-          {allowNone && <option value="none">No comparison</option>}
-        </select>
-      </div>
-      {isRamp && (
-        <>
-          <div className="field">
-            <label htmlFor={`${id}-target`}>{label}: target 30y rate (%)</label>
-            <input
-              id={`${id}-target`}
-              type="number"
-              min={1}
-              max={19}
-              step={0.25}
-              value={Number(target)}
-              onChange={(e) => onChange(`ramp:${Number(e.target.value).toFixed(2)}:${length}`)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor={`${id}-months`}>{label}: over (months)</label>
-            <input
-              id={`${id}-months`}
-              type="number"
-              min={1}
-              max={120}
-              step={1}
-              value={Number(length)}
-              onChange={(e) => onChange(`ramp:${target}:${Math.round(Number(e.target.value)) || 1}`)}
-            />
-          </div>
-        </>
-      )}
-    </>
-  );
-}
-
-function annual(rows: MonthlyRow[]): { labels: string[]; values: number[][] } {
-  if (rows.length <= 36) {
-    return {
-      labels: rows.map((r) => r.month),
-      values: rows.map((r) => [r.scheduled_principal_usd, r.voluntary_prepay_principal_usd, r.recoveries_received_usd]),
-    };
-  }
-  const byYear = new Map<string, number[]>();
-  for (const r of rows) {
-    const year = r.month.slice(0, 4);
-    const sums = byYear.get(year) ?? [0, 0, 0];
-    sums[0] = (sums[0] ?? 0) + r.scheduled_principal_usd;
-    sums[1] = (sums[1] ?? 0) + r.voluntary_prepay_principal_usd;
-    sums[2] = (sums[2] ?? 0) + r.recoveries_received_usd;
-    byYear.set(year, sums);
-  }
-  return { labels: [...byYear.keys()], values: [...byYear.values()] };
-}
-
-function rangeText(range: RangeValue | undefined, format: (v: number) => string): string {
-  if (!range || range.min === null || range.max === null) return "n/a";
-  return range.min === range.max ? format(range.min) : `${format(range.min)} – ${format(range.max)}`;
-}
-
-/** ADR 0009 §7 verdict per scenario and the spread across fitted model families (R1–R3). */
-function ReliabilityPanel({ scenarios }: { scenarios: ScenarioOut[] }) {
-  const rows = scenarios.filter((s) => s.reliability !== null);
-  if (rows.length === 0) return null;
-  const rangeFirst = rows.some((s) => s.reliability?.headline === "range");
-  return (
-    <section className="card" aria-labelledby="reliability-title" style={{ marginBottom: 16 }}>
-      <header>
-        <div>
-          <h2 id="reliability-title">Reliability</h2>
-          <p className="sub">
-            Whether each projection stays inside the model's training data, and the spread of results across the
-            fitted model families. The spread shows model disagreement, not a confidence interval.
-          </p>
-        </div>
-      </header>
-      {rangeFirst && (
-        <p className="warning" role="note">
-          At least one scenario is outside the model's training support: read the range, not the point values.
-        </p>
-      )}
-      <DataTable
-        caption="Applicability and model-family range"
-        rows={rows}
-        rowKey={(s) => s.label}
-        columns={[
-          { header: "Scenario", cell: (s) => s.label, text: true },
-          {
-            header: "Applicability",
-            cell: (s) => <span className={`badge verdict-${s.reliability?.verdict}`}>{s.reliability?.verdict}</span>,
-            text: true,
-          },
-          { header: "Balance outside training range", cell: (s) => pct(s.reliability?.outside_share) },
-          { header: "Thinly supported", cell: (s) => pct(s.reliability?.sparse_share) },
-          { header: "Returned in 24 months", cell: (s) => rangeText(s.model_range?.principal_returned_fraction_24m, (v) => pct(v)) },
-          { header: "Cash WAL", cell: (s) => rangeText(s.model_range?.cash_wal_years, years) },
-        ]}
-      />
-    </section>
-  );
-}
-
-/** Below this size a difference is reported as "about the same" (display rounding is 0.1). */
-const NEGLIGIBLE_PP = 0.05;
-const NEGLIGIBLE_MONTHS = 0.05;
-
-/** Plain-language reading of B against A, built only from the API's A−B deltas. */
-function ComparisonSummary({ a, b, deltas, horizon }: { a: ScenarioOut; b: ScenarioOut; deltas: Deltas; horizon: number }) {
-  const sentences: string[] = [];
-  const pp12 = deltas.principal_returned_12m_pp;
-  if (pp12 !== null) {
-    sentences.push(
-      Math.abs(pp12) < NEGLIGIBLE_PP
-        ? "Both return about the same share of today's balance in the first 12 months"
-        : `B returns ${Math.abs(pp12).toFixed(1)} pp ${pp12 > 0 ? "less" : "more"} of today's balance in the first 12 months`,
-    );
-  }
-  const wal = deltas.cash_wal_months;
-  if (wal !== null && a.summary.cash_wal_years !== null && b.summary.cash_wal_years !== null) {
-    sentences.push(
-      Math.abs(wal) < NEGLIGIBLE_MONTHS
-        ? "the cash weighted-average life is about the same"
-        : `B's cash weighted-average life is ${Math.abs(wal / 12).toFixed(1)} years ${wal > 0 ? "shorter" : "longer"} (${years(b.summary.cash_wal_years)} vs ${years(a.summary.cash_wal_years)})`,
-    );
-  }
-  const interest = deltas.contractual_interest_accrued_horizon_usd;
-  if (interest !== null && Math.abs(interest) >= 0.5) {
-    sentences.push(`over ${horizon} months B accrues ${usd(Math.abs(interest))} ${interest > 0 ? "less" : "more"} contractual interest`);
-  }
-  if (sentences.length === 0) return null;
-  const [first, ...rest] = sentences;
-  return (
-    <p className="comparison">
-      <strong>A: {a.label} · B: {b.label}.</strong> {first}
-      {rest.length > 0 ? `; ${rest.join("; ")}.` : "."}
-    </p>
-  );
-}
-
 /** The served model and the assumptions every number depends on, always visible. */
-function ModelContext({ result, asOf, asOfRate }: { result: ProjectionResponse; asOf: string; asOfRate: number }) {
+function ModelContext({ result, asOf, asOfRate, method }: { result: ProjectionResponse; asOf: string; asOfRate: number; method: Methodology | null }) {
   const a = result.assumptions;
   return (
-    <section className="context card" aria-label="Active model and assumptions">
-      <div>
-        <span className="context-label">Active model</span>
-        <strong>{modelName(result.model)}</strong>
-        <span className="muted"> · trained on synthetic data · </span>
-        <a href={href(ROUTES.quality)}>how it was chosen</a>
+    <section className="context" aria-labelledby="context-title">
+      <div className="panel" role="region" aria-label="Active model and assumptions">
+        <h2 id="context-title">About these numbers</h2>
+        <dl className="defs compact">
+          <dt>Active model</dt>
+          <dd>
+            <strong>{modelName(result.model)}</strong> · trained on synthetic data
+            {method ? ` (run ${method.model.run_id})` : ""} · <a href={href(ROUTES.quality)}>how it was chosen</a>
+          </dd>
+          <dt>As of</dt>
+          <dd>
+            {asOf} · last observed 30-year rate {ratePct(asOfRate)} (synthetic history)
+          </dd>
+          <dt>Credit exits</dt>
+          <dd>
+            {String(a.credit_exits)}; severity {pct(Number(a.credit_severity), 0)}, recovery after {String(a.recovery_lag_months)} months
+          </dd>
+          <dt>Conventions</dt>
+          <dd>rates act from month 2 · note rates fixed · curtailments not modeled · undiscounted</dd>
+        </dl>
+        <details className="drawer">
+          <summary>Every served assumption</summary>
+          <dl className="defs compact">
+            {Object.entries(a).map(([k, v]) => (
+              <div key={k} style={{ display: "contents" }}>
+                <dt>{k.replaceAll("_", " ")}</dt>
+                <dd>{String(v)}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
       </div>
-      <div>
-        <span className="context-label">As of</span>
-        {asOf} · last observed 30-year rate {ratePct(asOfRate)} (synthetic history)
-      </div>
-      <div>
-        <span className="context-label">Credit exits</span>
-        {String(a.credit_exits)}; severity {pct(Number(a.credit_severity), 0)}, recovery after {String(a.recovery_lag_months)} months
-      </div>
-      <div>
-        <span className="context-label">Conventions</span>
-        rates act from month 2 · note rates fixed · curtailments not modeled · undiscounted
-      </div>
+      {method && (
+        <div className="panel">
+          <h2>Limitations</h2>
+          <ul className="limits">
+            {method.limitations.map((l) => (
+              <li key={l}>{l}</li>
+            ))}
+          </ul>
+          <p className="sub">
+            <a href={href(ROUTES.methodology)}>Methodology, pipeline and every formula</a>
+          </p>
+        </div>
+      )}
     </section>
   );
 }
@@ -217,11 +81,15 @@ export function ScenarioLab({ pools, asOfRate, params }: Props) {
   const [lag, setLag] = useState(Number(params.get("lag") ?? 12));
   const [cdr, setCdr] = useState(params.get("cdr") ?? "");
   const [result, setResult] = useState<ProjectionResponse | null>(null);
+  const [method, setMethod] = useState<Methodology | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [composition, setComposition] = useState<"a" | "b">("a");
-  const [copied, setCopied] = useState(false);
+  const [cursor, setCursor] = useState(24);
   const pending = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    api.methodology().then(setMethod).catch(() => setMethod(null));
+  }, []);
 
   const request = useMemo(() => ({
     pool_id: poolId,
@@ -254,273 +122,77 @@ export function ScenarioLab({ pools, asOfRate, params }: Props) {
         .finally(() => {
           if (!controller.signal.aborted) setLoading(false);
         });
-    }, 250);
+    }, 200);
     return () => window.clearTimeout(timer);
   }, [request, poolId, codeA, codeB, horizon, severity, lag, cdr]);
 
   const pool = pools.find((p) => p.pool_id === poolId);
-  const a = result?.a;
-  const b = result?.b ?? null;
-  const months = a?.monthly.map((r) => r.month) ?? [];
-  const seriesOf = (pick: (r: MonthlyRow) => number | null): Series[] => {
-    const out: Series[] = [];
-    if (a) out.push({ id: "a", label: `A: ${a.label}`, color: "var(--series-1)", values: a.monthly.map(pick) });
-    if (b) out.push({ id: "b", label: `B: ${b.label}`, color: "var(--series-2)", values: b.monthly.map(pick) });
-    return out;
-  };
-  const shown: ScenarioOut | null = composition === "b" && b ? b : (a ?? null);
-  const stacked = shown ? annual(shown.monthly) : null;
-  const deltas = result?.a_minus_b;
-
-  async function share() {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  }
+  const A = useMemo(() => (result ? sideView("a", result.a) : null), [result]);
+  const B = useMemo(() => (result?.b ? sideView("b", result.b) : null), [result]);
+  const cmp = useMemo(() => (result ? compare(result) : null), [result]);
+  const n = A?.months ?? 1;
+  const month = clampMonth(cursor, n);
+  const label = useCallback(
+    (m: number) => `Month ${m} · ${result?.a.monthly[m - 1]?.month ?? ""}`,
+    [result],
+  );
+  const shared = { month, set: (m: number) => setCursor(clampMonth(m, n)), label };
+  const timing = String(result?.assumptions.scenario_timing ?? "");
 
   return (
-    <section aria-labelledby="lab-title">
-      <h1 id="lab-title">Scenario Lab</h1>
-      <p className="lede">
-        Compare how a fictional pool returns principal under two hypothetical 30-year mortgage-rate paths. Rates change
-        refinancing incentives, and with them modeled payoffs. Loan coupons never change.
-      </p>
-      <div className="controls" role="group" aria-label="Scenario inputs">
-        <div className="field">
-          <label htmlFor="pool">Fictional pool</label>
-          <select id="pool" value={poolId} onChange={(e) => setPoolId(e.target.value)}>
-            {pools.map((p) => (
-              <option key={p.pool_id} value={p.pool_id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <ScenarioPicker id="scenario-a" label="Scenario A" code={codeA} onChange={setCodeA} allowNone={false} />
-        <ScenarioPicker id="scenario-b" label="Scenario B" code={codeB} onChange={setCodeB} allowNone />
-        <div className="field">
-          <label htmlFor="horizon">Horizon</label>
-          <select id="horizon" value={horizon} onChange={(e) => setHorizon(Number(e.target.value))}>
-            {HORIZONS.map((h) => (
-              <option key={h} value={h}>
-                {h} months
-              </option>
-            ))}
-          </select>
-        </div>
-        <button type="button" onClick={share} aria-live="polite">
-          {copied ? "Link copied" : "Copy share link"}
-        </button>
-      </div>
-      {result && <ModelContext result={result} asOf={pool?.as_of ?? result.as_of} asOfRate={asOfRate} />}
+    <section aria-labelledby="lab-title" className="lab">
+      <header className="page-head">
+        <h1 id="lab-title">Scenario Lab</h1>
+        <p className="lede">
+          How quickly does a mortgage pool pay back its principal when interest rates move? Pick two hypothetical rate paths,
+          A and B, and compare what a prepayment model projects: when the money comes back, how much is still owed, and how
+          far to trust the answer.
+        </p>
+        {pool && (
+          <p className="facts">
+            {pool.name} · {pool.loans.toLocaleString("en-US")} loans · {usd(pool.current_upb_usd)} today · WAC{" "}
+            {ratePct(pool.wac_pct)} · as of {pool.as_of} · fictional portfolio, synthetic-trained model · not investment advice
+          </p>
+        )}
+      </header>
+
+      <Composer
+        pools={pools}
+        poolId={poolId}
+        onPool={setPoolId}
+        codeA={codeA}
+        codeB={codeB}
+        onA={setCodeA}
+        onB={setCodeB}
+        horizon={horizon}
+        onHorizon={setHorizon}
+        servedMonths={A?.months ?? null}
+        asOfRate={asOfRate}
+        verdictA={A?.verdict ?? null}
+        verdictB={B?.verdict ?? null}
+        credit={{ severity, lag, cdr, setSeverity, setLag, setCdr }}
+      />
 
       {error && (
-        <div className="warning" role="alert">
-          {error}
+        <div className="banner crit" role="alert">
+          <p>{error}</p>
         </div>
       )}
-      {result && result.warnings.length > 0 && (
-        <div className="warning" role="status">
-          <strong>Read with care</strong>
-          <ul>
-            {result.warnings.map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {!result && !error && <p aria-busy="true">Projecting the pool…</p>}
 
-      {a && (
-        <div className={loading ? "is-loading" : undefined} aria-busy={loading}>
-          {b && deltas && <ComparisonSummary a={a} b={b} deltas={deltas} horizon={horizon} />}
-          <div className="tiles">
-            <StatTile
-              label="Cash weighted-average life"
-              value={years(a.summary.cash_wal_years)}
-              detail={b ? `B ${years(b.summary.cash_wal_years)} · A−B ${signed(deltas?.cash_wal_months, "mo")}` : "full-life, principal cash"}
-            />
-            <StatTile
-              label="Principal returned in 12 months"
-              value={pct(a.summary.principal_returned_fraction_12m)}
-              detail={b ? `B ${pct(b.summary.principal_returned_fraction_12m)} · A−B ${signed(deltas?.principal_returned_12m_pp, "pp")}` : "of as-of balance"}
-            />
-            <StatTile
-              label="Principal returned in 24 months"
-              value={pct(a.summary.principal_returned_fraction_24m)}
-              detail={b ? `B ${pct(b.summary.principal_returned_fraction_24m)} · A−B ${signed(deltas?.principal_returned_24m_pp, "pp")}` : "of as-of balance"}
-            />
-            <StatTile
-              label={`Interest accrued, ${horizon} mo`}
-              value={usd(a.summary.contractual_interest_accrued_horizon_usd)}
-              detail={b ? `B ${usd(b.summary.contractual_interest_accrued_horizon_usd)} · A−B ${signedUsd(deltas?.contractual_interest_accrued_horizon_usd)}` : "contractual, undiscounted"}
-            />
-            <StatTile
-              label={`Remaining balance at ${horizon} mo`}
-              value={usd(a.summary.ending_upb_horizon_usd)}
-              detail={b ? `B ${usd(b.summary.ending_upb_horizon_usd)}` : `of ${usd(pool?.current_upb_usd)} today`}
-            />
+      {result && A && (
+        <div className={`lab-body${loading ? " is-loading" : ""}`} aria-busy={loading}>
+          <Outcome A={A} B={B} cmp={cmp} method={method} />
+          <FullTable A={A} B={B} cmp={cmp} />
+          <div className="timeline-grid">
+            <PrincipalChart A={A} B={B} cursor={shared} method={method} />
+            <Inspector A={A} B={B} cursor={shared} method={method} timing={timing} />
           </div>
-
-          <ReliabilityPanel scenarios={b ? [a, b] : [a]} />
-          <div className="grid-2">
-            <div className="card">
-              <header>
-                <div>
-                  <h2>30-year mortgage rate path</h2>
-                  <p className="sub">month-end, percent per year (hypothetical)</p>
-                </div>
-              </header>
-              <LineChart
-                title="30-year mortgage rate path by scenario"
-                summary={`Scenario rate paths over ${months.length} months.`}
-                xLabels={months}
-                series={seriesOf((r) => r.market_rate_30y_pct)}
-                yFormat={(v) => `${v.toFixed(1)}%`}
-              />
-            </div>
-            <div className="card">
-              <header>
-                <div>
-                  <h2>Modeled payoff speed (CPR)</h2>
-                  <p className="sub">full voluntary payoffs only, % of balance per year</p>
-                </div>
-              </header>
-              <LineChart
-                title="Model CPR by scenario"
-                summary="Annualized full-payoff rate implied by the model each month."
-                xLabels={months}
-                series={seriesOf((r) => (r.cpr_model === null ? null : r.cpr_model * 100))}
-                yFormat={(v) => `${v.toFixed(0)}%`}
-                includeZero
-              />
-            </div>
-            <div className="card">
-              <header>
-                <div>
-                  <h2>Cumulative principal returned</h2>
-                  <p className="sub">scheduled + payoffs + recoveries, % of as-of balance</p>
-                </div>
-              </header>
-              <LineChart
-                title="Cumulative principal returned by scenario"
-                summary="Share of the as-of balance returned as principal cash."
-                xLabels={months}
-                series={seriesOf((r) => r.cumulative_principal_returned_fraction * 100)}
-                yFormat={(v) => `${v.toFixed(0)}%`}
-                includeZero
-              />
-            </div>
-            <div className="card">
-              <header>
-                <div>
-                  <h2>Modeled remaining balance</h2>
-                  <p className="sub">expected unpaid principal, USD</p>
-                </div>
-              </header>
-              <LineChart
-                title="Modeled remaining balance by scenario"
-                summary="Expected remaining principal at each month end."
-                xLabels={months}
-                series={seriesOf((r) => r.ending_upb_usd)}
-                yFormat={(v) => usd(v)}
-                includeZero
-              />
-            </div>
-          </div>
-
-          {stacked && shown && (
-            <div className="card" style={{ marginTop: 16 }}>
-              <header>
-                <div>
-                  <h2>Where principal cash comes from</h2>
-                  <p className="sub">
-                    {shown.label} · USD per {stacked.labels.length === shown.monthly.length ? "month" : "calendar year"}; credit
-                    exits are not cash until recovered
-                  </p>
-                </div>
-                {b && (
-                  <div className="segmented" role="group" aria-label="Scenario shown">
-                    <button type="button" aria-pressed={composition === "a"} onClick={() => setComposition("a")}>
-                      A
-                    </button>
-                    <button type="button" aria-pressed={composition === "b"} onClick={() => setComposition("b")}>
-                      B
-                    </button>
-                  </div>
-                )}
-              </header>
-              <StackedColumns
-                title={`Principal cash composition for ${shown.label}`}
-                summary="Scheduled principal, voluntary payoffs and illustrative recoveries per period."
-                categories={stacked.labels}
-                parts={[
-                  { id: "scheduled", label: "Scheduled principal", color: "var(--series-1)" },
-                  { id: "prepay", label: "Voluntary payoffs", color: "var(--series-2)" },
-                  { id: "recoveries", label: "Recoveries (illustrative)", color: "var(--series-3)" },
-                ]}
-                values={stacked.values}
-                format={(v) => usd(v)}
-              />
-            </div>
-          )}
-
-          <details className="drawer card" style={{ marginTop: 16 }}>
-            <summary>Assumptions and table view</summary>
-            {STATIC && (
-              <p className="muted" style={{ marginBottom: 0 }}>
-                This static site was computed at the default credit assumptions. Run the full app (see the README) to
-                change them or to enter custom rate paths.
-              </p>
-            )}
-            <fieldset className="controls plain" style={{ marginTop: 12 }} disabled={STATIC} aria-label="Credit assumptions">
-              <div className="field">
-                <label htmlFor="severity">Credit severity (share of disposed principal lost)</label>
-                <input id="severity" type="number" min={0} max={1} step={0.05} value={severity}
-                  onChange={(e) => setSeverity(Math.min(1, Math.max(0, Number(e.target.value))))} />
-              </div>
-              <div className="field">
-                <label htmlFor="cdr">Credit exits, annual CDR % (blank: default)</label>
-                <input id="cdr" type="number" min={0} max={20} step={0.1} value={cdr} placeholder="default"
-                  onChange={(e) => setCdr(e.target.value === "" ? "" : String(Math.min(20, Math.max(0, Number(e.target.value)))))} />
-              </div>
-              <div className="field">
-                <label htmlFor="lag">Recovery lag (months)</label>
-                <input id="lag" type="number" min={0} max={36} step={1} value={lag}
-                  onChange={(e) => setLag(Math.min(36, Math.max(0, Math.round(Number(e.target.value)))))} />
-              </div>
-            </fieldset>
-            <dl className="defs">
-              {Object.entries(result.assumptions).map(([k, v]) => (
-                <div key={k} style={{ display: "contents" }}>
-                  <dt>{k.replaceAll("_", " ")}</dt>
-                  <dd>{String(v)}</dd>
-                </div>
-              ))}
-            </dl>
-            <DataTable
-              caption={`Monthly ledger, scenario A (${a.label}), USD`}
-              rows={a.monthly}
-              rowKey={(r) => r.month}
-              columns={[
-                { header: "Month", cell: (r) => r.month },
-                { header: "30y rate", cell: (r) => ratePct(r.market_rate_30y_pct) },
-                { header: "Begin UPB", cell: (r) => usd(r.beginning_upb_usd) },
-                { header: "Scheduled", cell: (r) => usd(r.scheduled_principal_usd) },
-                { header: "Payoffs", cell: (r) => usd(r.voluntary_prepay_principal_usd) },
-                { header: "Credit exits", cell: (r) => usd(r.credit_exit_principal_usd) },
-                { header: "Recoveries", cell: (r) => usd(r.recoveries_received_usd) },
-                { header: "Interest accrued", cell: (r) => usd(r.contractual_interest_accrued_usd) },
-                { header: "End UPB", cell: (r) => usd(r.ending_upb_usd) },
-                { header: "CPR", cell: (r) => pct(r.cpr_model) },
-              ]}
-            />
-          </details>
+          <Drivers A={A} B={B} cursor={shared} method={method} pool={pool} timing={timing} />
+          <Composition A={A} B={B} />
+          <Trust A={A} B={B} method={method} warnings={result.warnings} />
+          <Ledger A={A} B={B} cursor={shared} />
+          <ModelContext result={result} asOf={pool?.as_of ?? result.as_of} asOfRate={asOfRate} method={method} />
         </div>
       )}
     </section>

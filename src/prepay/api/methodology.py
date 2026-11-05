@@ -5,6 +5,27 @@ from __future__ import annotations
 from typing import Any
 
 from prepay.features.spec import FEATURES
+from prepay.reliability.support import (
+    MIN_CELL_PAYOFFS,
+    MIN_CELL_ROWS,
+    OUTSIDE_EXTRAPOLATING,
+    OUTSIDE_OR_SPARSE_EXTRAPOLATING,
+    OUTSIDE_UNSUPPORTED,
+    SUPPORT_QUANTILES,
+)
+
+# Built from the constants decide() uses, so the served rule cannot drift from the implemented one.
+VERDICT_RULE = (
+    "over the horizon, weighted by projected balance; a loan-month is outside if a monitored "
+    "feature (incentive, rate level, 6-month change, age, burnout) lies outside the "
+    f"{SUPPORT_QUANTILES[0]:.1%}-{SUPPORT_QUANTILES[1]:.1%} training range, and thinly "
+    "supported if it is not outside but a joint cell it falls in has fewer than "
+    f"{MIN_CELL_ROWS:,} training rows or fewer than {MIN_CELL_PAYOFFS} training payoffs; "
+    f"unsupported if the outside share >= {OUTSIDE_UNSUPPORTED:.0%}; extrapolating if the "
+    f"outside share >= {OUTSIDE_EXTRAPOLATING:.0%} or the outside plus thinly supported share "
+    f">= {OUTSIDE_OR_SPARSE_EXTRAPOLATING:.0%}; otherwise supported (ADR 0009 §7; a pool is "
+    "judged on row support, not PSI)"
+)
 
 METRICS: dict[str, dict[str, str]] = {
     "scheduled_principal_usd": {
@@ -71,10 +92,7 @@ METRICS: dict[str, dict[str, str]] = {
     "reliability_verdict": {
         "label": "Applicability verdict",
         "unit": "supported / extrapolating / unsupported",
-        "formula": "over the horizon, balance-weighted: unsupported if >= 25% of balance has a "
-        "monitored feature (incentive, rate level, 6-month change, age, burnout) outside the "
-        "0.5-99.5% training range; extrapolating if >= 5% outside or >= 20% outside or in joint "
-        "cells with < 1,000 training rows or < 20 payoffs; otherwise supported (ADR 0009 §7)",
+        "formula": VERDICT_RULE,
     },
     "model_range": {
         "label": "Model-family range",

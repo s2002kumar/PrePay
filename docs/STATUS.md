@@ -4,7 +4,7 @@ Public, non-sensitive summary. Status levels: `NOT BUILT` · `IMPLEMENTED-SYNTHE
 tested on synthetic data only) · `VALIDATED-REAL-PRIVATE` (run privately on lawfully obtained
 Freddie Mac files) · `PUBLIC-DEPLOYED` · `BLOCKED`. A green CI run is never a real-data claim.
 
-Last updated: 2026-11-02.
+Last updated: 2026-11-04.
 
 `VALIDATED-REAL-PRIVATE` means the stage was run and checked on the real files privately. It
 records that the check ran, not that every result was favourable. Real-data outcomes, including
@@ -21,6 +21,19 @@ criterion's evidence and the defects that remain.
 | Static public site (precomputed fictional responses, verified against the API) | PUBLIC-DEPLOYED: built, verified and deployed by `pages.yml` from `main` ([41493908359](https://github.com/s2002kumar/PrePay/actions/runs/41493908359), `a9b8b68`); checked in a browser after each deploy | <https://s2002kumar.github.io/PrePay/> |
 | Live app (custom paths, adjustable credit) | IMPLEMENTED-SYNTHETIC: local and Docker; built and health-checked in CI | `make demo`, `Dockerfile`, `docker.yml` |
 | Real-data research and forward test | private and separate; frozen after R2 | sections below |
+
+## Visual milestone: Scenario Lab B+ (2026-11-04)
+
+The owner chose design direction B with two parts from A after reviewing interactive prototypes
+(ADR 0012). The implementation is one frontend PR plus two served-label corrections. It awaits
+the owner's final review and is **not merged**. Evidence:
+`docs/reviews/VISUAL_MILESTONE_ACCEPTANCE.md`, including before/after screenshots.
+
+| Item | Status | Evidence |
+|---|---|---|
+| B+ Scenario Lab (outcome, inspector, full table, linked drivers, composition, trust, ledger) | IMPLEMENTED-SYNTHETIC, in review | `web/src/views/lab/`, `web/src/derive.ts` |
+| Every displayed number reconciled to the served JSON | browser-tested | `web/e2e/reconcile.spec.ts`, `web/src/derive.test.ts` |
+| Model-family names listed once; served applicability rule matches `decide()` | fixed, regression-tested | `tests/integration/test_api_reliability.py` |
 
 ## Blockers (owner action required)
 

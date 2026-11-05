@@ -28,8 +28,9 @@ The static build carries its Content-Security-Policy as a meta tag, because Page
 headers.
 
 Before each deploy, `pages.yml` runs Playwright against the site:
-- for four pool, scenario and horizon cases, the site must show exactly what the live app
-  shows: tiles, the comparison sentence, the reliability table and the monthly ledger table;
+- for five pool, scenario and horizon cases, the site must show exactly what the live app
+  shows: the outcome headline and comparisons, the full comparison table, the inspector, the
+  trust panel, the balance composition and the monthly ledger;
 - every grid scenario must load;
 - deep links must return 200;
 - axe must report no serious violations.

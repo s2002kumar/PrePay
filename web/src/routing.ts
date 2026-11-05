@@ -82,3 +82,17 @@ export function scenarioLabel(code: string): string {
   if (ramp) return `Ramp to ${Number(ramp[1]).toFixed(2)}% over ${ramp[2]} mo`;
   return code;
 }
+
+/** Compact scenario name for steppers and legends: "Flat", "−100 bp", "Ramp 4.50%". */
+export function scenarioShort(code: string): string {
+  if (code === "none") return "None";
+  if (code === "flat") return "Flat";
+  const parallel = /^p(-?\d{1,3})$/.exec(code);
+  if (parallel?.[1] !== undefined) {
+    const bp = Number(parallel[1]);
+    return `${bp > 0 ? "+" : bp < 0 ? "−" : ""}${Math.abs(bp)} bp`;
+  }
+  const ramp = /^ramp:([\d.]+):(\d+)$/.exec(code);
+  if (ramp) return `Ramp ${Number(ramp[1]).toFixed(2)}%`;
+  return code;
+}

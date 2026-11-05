@@ -12,18 +12,25 @@ export interface Part {
 interface Props {
   title: string;
   summary: string;
-  categories: string[]; // x labels (months or years)
+  categories: string[]; // full period names (tooltip and screen readers)
+  tickLabels?: string[]; // short axis labels; defaults to categories
   parts: Part[];
   values: number[][]; // values[category][part], non-negative
   format: (value: number) => string;
   height?: number;
+  /** Fixed top of the y-axis: panels that are compared side by side must share one scale. */
+  yMax?: number;
+  legend?: boolean;
+  testId?: string;
 }
 
 const MARGIN = { top: 12, right: 12, bottom: 28, left: 56 };
 const GAP = 2;
 
 /** Stacked columns for part-to-whole over time: 2px surface gaps, rounded top, one baseline. */
-export function StackedColumns({ title, summary, categories, parts, values, format, height = 220 }: Props) {
+export function StackedColumns({
+  title, summary, categories, tickLabels = categories, parts, values, format, height = 220, yMax, legend = true, testId,
+}: Props) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
   const descriptionId = useId();
@@ -31,30 +38,32 @@ export function StackedColumns({ title, summary, categories, parts, values, form
   const innerHeight = height - MARGIN.top - MARGIN.bottom;
   const totals = values.map((row) => row.reduce((a, b) => a + b, 0));
   const y = useMemo(
-    () => scaleLinear().domain([0, Math.max(...totals, 1)]).nice(4).range([innerHeight, 0]),
-    [totals, innerHeight],
+    () => scaleLinear().domain([0, Math.max(yMax ?? 0, ...totals, 1)]).nice(4).range([innerHeight, 0]),
+    [totals, innerHeight, yMax],
   );
   const band = innerWidth / Math.max(categories.length, 1);
   const barWidth = Math.max(2, Math.min(24, band - GAP));
   const labelEvery = Math.max(1, Math.ceil(categories.length / Math.max(2, Math.floor(innerWidth / 70))));
 
   return (
-    <div className="chart" ref={ref}>
-      <div className="legend" aria-hidden="true">
-        {parts.map((p) => (
-          <span key={p.id}>
-            <i className="key-box" style={{ background: p.color }} />
-            {p.label}
-          </span>
-        ))}
-      </div>
+    <div className="chart" ref={ref} data-testid={testId} data-ymax={y.domain()[1]}>
+      {legend && (
+        <div className="legend" aria-hidden="true">
+          {parts.map((p) => (
+            <span key={p.id}>
+              <i className="key-box" style={{ background: p.color }} />
+              {p.label}
+            </span>
+          ))}
+        </div>
+      )}
       <svg width={width} height={height} role="img" aria-label={title} aria-describedby={descriptionId}>
         <desc id={descriptionId}>{summary}</desc>
         <g transform={`translate(${MARGIN.left},${MARGIN.top})`}>
           {y.ticks(4).map((t) => (
             <g key={t}>
               <line x1={0} x2={innerWidth} y1={y(t)} y2={y(t)} stroke="var(--grid)" strokeWidth={1} />
-              <text x={-8} y={y(t)} dy="0.32em" textAnchor="end" fontSize={11} fill="var(--ink-muted)">
+              <text className="tick" x={-8} y={y(t)} dy="0.32em" textAnchor="end" fontSize={11} fill="var(--ink-muted)">
                 {format(t)}
               </text>
             </g>
@@ -101,7 +110,7 @@ export function StackedColumns({ title, summary, categories, parts, values, form
                 })}
                 {i % labelEvery === 0 && (
                   <text x={cx} y={innerHeight + 18} textAnchor="middle" fontSize={11} fill="var(--ink-muted)">
-                    {categories[i]}
+                    {tickLabels[i]}
                   </text>
                 )}
               </g>

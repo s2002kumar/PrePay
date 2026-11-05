@@ -7,6 +7,18 @@ import type { Health, Methodology as Method } from "../types";
 
 const REPO = "https://github.com/s2002kumar/PrePay";
 
+const EVIDENCE: [string, string, string][] = [
+  ["blob/main/docs/ARCHITECTURE.md", "Architecture", "storage, module boundaries, interfaces and release gates"],
+  ["blob/main/docs/HOW_IT_WORKS.md", "How it works", "from loan records to the monthly ledger, step by step"],
+  ["blob/main/docs/validation/FINANCE_ENGINE.md", "Finance engine validation", "generated disclosures for the cash-flow engine on synthetic pool profiles"],
+  ["blob/main/docs/validation/ORACLE_AUDIT.md", "Oracle audit", "event rules, conservation, amortization and scenario mechanics, each against a separately written oracle"],
+  ["blob/main/docs/VALIDATION_REPORT.md", "Validation report", "model selection, sealed holdouts and every baseline"],
+  ["blob/main/docs/BENCHMARKS.md", "Benchmarks", "measured wall time, peak memory and throughput"],
+  ["tree/main/tests", "Tests", "unit, property, integration, finance-oracle, API and browser suites"],
+  ["blob/main/.github/workflows/ci.yml", "Public CI", "synthetic, deterministic, read-only permissions"],
+  ["tree/main/docs/decisions", "Decision records", "every locked choice and its reasons"],
+];
+
 export function Methodology() {
   const [method, setMethod] = useState<Method | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
@@ -80,6 +92,20 @@ export function Methodology() {
           <a href={REPO} rel="noreferrer">GitHub repository</a> · <a href={`${REPO}/blob/main/docs/STATUS.md`} rel="noreferrer">status ledger</a> ·{" "}
           <a href={`${REPO}/blob/main/docs/VALIDATION_REPORT.md`} rel="noreferrer">validation report</a>
         </p>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h2>For engineers: where the evidence lives</h2>
+        <ul className="limits">
+          {EVIDENCE.map(([path, label, what]) => (
+            <li key={path}>
+              <a href={`${REPO}/${path}`} rel="noreferrer">
+                {label}
+              </a>{" "}
+              · {what}
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>

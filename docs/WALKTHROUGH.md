@@ -27,20 +27,31 @@ with every claim scoped to its evidence.
 
 1. **Scenario Lab** (opens by default). The fictional 2023 pool holds loans with roughly 7%
    coupons. Scenario A keeps rates flat; scenario B drops them 100 bp.
-   - The sentence above the tiles reads B against A in plain language. With lower rates, more
-     borrowers refinance, principal comes back years sooner, and less interest accrues.
-   - The strip above the results names the active model and every assumption the numbers
-     depend on.
-2. **Change the inputs.** Set scenario B to *Parallel +300 bp*: payoffs slow, and the cash
+   - The outcome card leads with the support status, then the answer in one line: how many years
+     sooner (or later) principal comes back under B, by cash weighted-average life. One
+     paragraph then states the financial consequence: more principal back within 24 months,
+     less still owed, less interest accrued.
+   - Beside it, four dots-on-a-line comparisons put A and B on one axis per metric. Hatched
+     brackets show the spread across model families, labeled as disagreement, not a confidence
+     interval.
+2. **Change the inputs.** Step scenario B up to *+300 bp*: payoffs slow, and the cash
    weighted-average life stretches from about 7.6 to about 11.9 years. That scenario is flagged
-   **unsupported**, because rates that high are outside the model's training data. Switch the
-   pool to the *2021 low-coupon pool*: its 3% loans are far out of the money, so every scenario
-   is flagged as extrapolating or unsupported. For unsupported ones, the page says to read the
-   model range, not the point values. Every view is a shareable URL.
-3. **Read the Reliability table.** Each scenario gets an applicability verdict: how much of the
-   projected balance lies outside the model's training range. The table also shows the spread
-   across all fitted model families, labeled as disagreement, not a confidence interval.
-4. **Open "Assumptions and table view"** to see the full monthly ledger behind the charts.
+   **unsupported**, because rates that high are outside the model's training data. The page
+   switches to range-first: the headline becomes the model-family range, point values turn
+   hollow and B's lines dashed. Switch the pool to the *2021 low-coupon pool*: its 3% loans are
+   far out of the money, so every scenario is flagged as extrapolating or unsupported. Every view
+   is a shareable URL.
+3. **Move the cursor.** Drag across any chart, or use the arrow keys on it. The inspector beside
+   the main chart shows every served monthly field for A, B and B − A at that month. Click a row
+   for its served formula. The three "why" charts (rates, payoff speed, balance) follow the same
+   cursor.
+4. **Audit the numbers.**
+   - *Where today's balance goes* splits the as-of balance into scheduled principal, early
+     payoffs, credit exits (not cash) and the balance still owed, and shows that it adds back to
+     the dollar.
+   - *How far to trust this* shows each scenario's applicability verdict against the rule's
+     thresholds.
+   - *Full comparison table* and *Monthly ledger* open the complete figures.
 5. **Model quality** shows how the served model was chosen, by a rule fixed before testing, and
    its one-time sealed holdout result, next to every baseline.
    **Methodology** defines every number with its unit and formula.

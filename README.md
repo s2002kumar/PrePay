@@ -38,7 +38,7 @@ locally (below). New here? Start with the [five-minute walkthrough](docs/WALKTHR
 
 ![Scenario Lab comparing a flat rate path with a −100 bp shock for a fictional 2023 pool](docs/images/scenario-lab.png)
 
-*Fictional pool, synthetic-trained model (`dev` preset). Not a forecast of real mortgages.*
+*Fictional pool, synthetic-trained model (`ci`-preset bundle; the public site uses the larger `dev` preset, so its numbers differ). Not a forecast of real mortgages.*
 
 ## Why it matters
 
@@ -64,6 +64,7 @@ Prepay makes that timing explicit, with every assumption labeled.
 | Failure diagnostics (era encoding, economic probes, support maps, stability) and constrained candidates (X1–X3, H1) | built and tested on synthetic data, with known-answer tests; real runs are owner-run | [Plan](docs/RELIABILITY_PLAN.md), [ADR 0009](docs/decisions/0009-reliability-program-protocol.md) |
 | Forward evaluation on months nobody has seen | built; pre-registered; waits for a release with cutoff ≥ 2027-06 | [ADR 0010](docs/decisions/0010-forward-evaluation-preregistration.md) |
 | Applicability verdict, model-family range and credit-as-assumption in every projection | implemented in the demo API and UI | [R1 packet](docs/reviews/R1.md) |
+| Scenario Lab analytics interface: outcome first, cursor-linked inspector, full comparison table, support status ahead of every headline | implemented; every displayed number reconciled to the served JSON in browser tests; in owner review | [ADR 0012](docs/decisions/0012-scenario-lab-visual-system.md), [acceptance](docs/reviews/VISUAL_MILESTONE_ACCEPTANCE.md) |
 | Hosted live container (custom paths online) | **not hosted**: every free container host needs an owner account | [Deployment](docs/DEPLOYMENT.md) |
 
 ## How it works

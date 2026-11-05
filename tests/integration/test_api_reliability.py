@@ -8,6 +8,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from prepay.api.app import create_app
+from prepay.api.schemas import CreditIn
+from prepay.reliability import support
+from prepay.scenarios.rates import RateScenario
 
 POOL = "fictional-2023-high-coupon"
 
@@ -56,6 +59,63 @@ def test_model_range_brackets_the_selected_model(client: TestClient) -> None:
         low, high = spread[metric]["min"], spread[metric]["max"]
         assert low <= summary[metric] + 1e-12
         assert summary[metric] <= high + 1e-12
+
+
+def test_model_range_names_each_family_once_and_keeps_the_spread(client: TestClient) -> None:
+    # Regression: the selected model was listed again under its family name (B2, B1, B2, M1).
+    for horizon in (12, 120, 360):
+        body = project(
+            client, compare_to={"kind": "parallel", "shock_bps": 200}, horizon_months=horizon
+        )
+        for side in ("a", "b"):
+            spread = body[side]["model_range"]
+            assert len(spread["models"]) == len(set(spread["models"]))
+            assert set(spread["models"]) == {"B1_lookup", "B2_logistic", "M1_lightgbm"}
+            assert spread["models"][0] == body["model"]  # the served model leads, as before
+    # The spread itself is the min and max over the family projections, unchanged by naming.
+    service = client.app.state.service
+    scenario, credit = RateScenario("parallel", 200, ()), CreditIn()
+    served = service.model_range(POOL, scenario, credit, 60)
+    for metric in ("cash_wal_years", "principal_returned_fraction_24m", "ending_upb_horizon_usd"):
+        values = [
+            service.result(POOL, scenario, credit, key).summary(60)[metric]
+            for key in service.models
+        ]
+        assert getattr(served, metric).min == min(values)
+        assert getattr(served, metric).max == max(values)
+
+
+def test_served_verdict_rule_states_the_implemented_thresholds(client: TestClient) -> None:
+    rule = client.get("/api/methodology").json()["metrics"]["reliability_verdict"]["formula"]
+    assert f">= {support.OUTSIDE_UNSUPPORTED:.0%}" in rule
+    assert f"outside share >= {support.OUTSIDE_EXTRAPOLATING:.0%}" in rule
+    both = support.OUTSIDE_OR_SPARSE_EXTRAPOLATING
+    assert f"outside plus thinly supported share >= {both:.0%}" in rule
+    assert f"fewer than {support.MIN_CELL_ROWS:,} training rows" in rule
+    assert f"fewer than {support.MIN_CELL_PAYOFFS} training payoffs" in rule
+    assert "PSI" in rule  # pools are judged on row support only (ADR 0009 amendment 1)
+    assert ">= 20% outside or in joint" not in rule  # the superseded wording
+    # The stated rule and decide() agree at and around every threshold.
+    cases = [
+        (0.25, 0.0),
+        (0.2499, 0.0),
+        (0.05, 0.0),
+        (0.0499, 0.0),
+        (0.0, 0.20),
+        (0.10, 0.10),
+        (0.0, 0.1999),
+        (0.04, 0.15),
+        (0.0, 0.0),
+    ]
+    for outside, sparse in cases:
+        expected = (
+            "unsupported"
+            if outside >= 0.25
+            else "extrapolating"
+            if outside >= 0.05 or outside + sparse >= 0.20
+            else "supported"
+        )
+        assert support.decide(outside, sparse) == expected
 
 
 def test_credit_exits_are_a_labeled_assumption_unless_validated(client: TestClient) -> None:

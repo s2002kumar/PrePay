@@ -61,3 +61,27 @@ export const MODEL_NAMES: Record<string, string> = {
 export function modelName(family: string): string {
   return MODEL_NAMES[family] ?? family;
 }
+
+/** B − A in years (two decimals: cash WAL is served to the month and more). */
+export function signedYears(value: number | null | undefined): string {
+  return signed(value, "yr", 2);
+}
+
+/** B − A in percentage points of the as-of balance. */
+export function signedPp(value: number | null | undefined): string {
+  return signed(value, "pp", 1);
+}
+
+/** Whole dollars with sign, for the ledger and reconciliation lines. */
+export function signedUsdFull(value: number): string {
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "±";
+  return `${sign}${usdFull(Math.abs(value))}`;
+}
+
+/** Dollars and cents for reconciliation residuals; anything under half a cent prints as $0.00. */
+export function usdCents(value: number): string {
+  if (!Number.isFinite(value)) return "n/a";
+  const v = Math.abs(value) < 0.005 ? 0 : value;
+  const text = Math.abs(v).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return v < 0 ? `−${text}` : text;
+}
