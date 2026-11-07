@@ -1,7 +1,9 @@
 # ADR 0013: Real-data research product: audit and go/no-go proposal
 
-- Status: **proposed**, awaiting the owner's decision. Nothing below is implemented.
-- Date: 2026-11-05
+- Status: **accepted with revisions** by the owner on 2026-11-07. The decision record below
+  supersedes the verdicts in §0 and the plan in §12 wherever they differ. The rest stays as the
+  record of the audit.
+- Date: 2026-11-05 (proposal), 2026-11-07 (decision)
 - Scope: whether and how the private real-data study (ADR 0006, 0009, 0010) can strengthen the
   public product. Two candidate additions: **A**, a historical model-evaluation view; **B**, a
   research mode powered by a real-trained model. ADR 0006, 0009 and 0010 stay in force. If
@@ -13,6 +15,56 @@
   blind runner's status files (exit codes, wall time, peak memory, digests, exception class
   names), and public sources. Where a fact about real-data results is stated, it is the owner's
   own statement in the reliability brief, as recorded in `docs/RELIABILITY_PLAN.md` §2.
+
+## Decision record (owner, 2026-11-07)
+
+The owner reviewed the proposal and approved a revised, **research-first** direction.
+
+| ID | Decision | Effect |
+|---|---|---|
+| D1 | Draft an inquiry to Freddie Mac about noncommercial publication of non-reconstructable aggregate research findings, and about restrictions on derived model outputs. Don't send it yet | Drafted in the owner's private notes, not sent. Publication stays blocked |
+| D2 | GO for a historical research presentation, but only after the revised model comparison and its statistical findings exist. The static data contract and synthetic fixtures may be prepared; the public research page is not built yet | Deferred until after E01. The contract will mirror E01's report schema, so it is designed after Gate B fixes that schema |
+| D3 | NO to public inference with a real-trained model, and NO to B-lite, for this milestone | Nothing trained on real data is served or published |
+| D4 | GO to investigate and repair the G15 memory failure in B2's cohort scoring. Then resume the unfinished rolling-origin work and the G16 stability jobs, subject to measured resource gates and numerical-correctness gates | The repair is Gate A (`docs/reviews/PREPAY_2_GATE_A.md`). Resumption is specified as experiment E01 (ADR 0014, proposed) |
+| D5 | Amend ADR 0011 and 0012 only as far as needed to authorize a separate Prepay 2.0 real-data modeling research phase. Preserve the original sealed evaluation, the registered forward study and the released B+ product | ADR 0011 amendment 1; ADR 0012 amendment 1 |
+
+**Research objective.** The phase has three aims:
+- compare the existing statistical and ML models rigorously;
+- investigate the documented rate-regime failures;
+- improve the payoff model where evidence supports a particular change.
+
+The first experiment, E01, tests economic generalization. It compares B2, M1, X1–X3 and H1 on
+the existing rolling-origin protocol, with B0 and B1 as references. It covers calibration,
+dependence-aware uncertainty, payoff error and financial run-off.
+
+**Immediate execution is limited to Gate A:**
+- audit the failed queue;
+- implement and test the bounded-memory correction;
+- correct the stale G15/G16 status;
+- prepare the exact E01 execution specification.
+
+No expensive private training and no website work.
+
+### Frontend direction (proposal for a later release; not implemented)
+
+Keep the Scenario Lab exactly as released, and avoid a redesign (ADR 0012 amendment 1). Today
+the navigation lists four peers: Portfolio, Scenario Lab, Model quality, Methodology & status.
+"Model quality" shows the *synthetic-trained* demo model's synthetic holdout. A reader could take
+it for real-data evidence. The proposal regroups the routes into three areas, each with a fixed
+data-class label in the page header:
+
+| Area | Pages | Header label |
+|---|---|---|
+| **What-if analysis** | Portfolio, Scenario Lab (unchanged) | Fictional pools · synthetic-trained model |
+| **Historical evaluation** | New, only when D2 and the terms allow. It holds the sealed primary study's one opening, and E01's development comparison, each labeled with its evidence class | Freddie Mac sample · aggregate results · past months |
+| **Methodology** | Methodology & status; the current Model quality page, renamed "Synthetic model check" | Documentation |
+
+- **Links.** Existing URLs keep working, and `/model-quality` stays a valid route.
+- **No crossing links.** Nothing links a what-if projection to a real-data result: the two use
+  different models, and a link would suggest they are one.
+- **Before D2.** The Historical evaluation area shows one short page. It states what has been
+  studied privately, why nothing is published yet, and the forward test's registration date.
+- **Cost.** One navigation component, one renamed page and its tests. No visual-system change.
 
 ## 0. Verdict in brief
 

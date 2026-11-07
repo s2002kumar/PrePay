@@ -1,0 +1,174 @@
+{
+ "2007-12": {
+  "train": "1999-01..2005-12",
+  "train_range_pct": [
+   5.24,
+   8.62
+  ],
+  "train_6m_change_bps": [
+   -119.0,
+   103.0
+  ],
+  "evaluate": "2008-01..2009-12",
+  "eval_months": 24,
+  "eval_range_pct": [
+   4.78,
+   6.52
+  ],
+  "eval_months_below_train_min": 10,
+  "eval_months_above_train_max": 0,
+  "eval_6m_change_bps": [
+   -168.0,
+   84.0
+  ],
+  "eval_new_low_months": 4,
+  "train_new_low_months": 9,
+  "regime_shift": true,
+  "why": [
+   "level outside training range in >=25% of months",
+   "6m fall beyond training min"
+  ]
+ },
+ "2009-12": {
+  "train": "1999-01..2007-12",
+  "train_range_pct": [
+   5.24,
+   8.62
+  ],
+  "train_6m_change_bps": [
+   -119.0,
+   103.0
+  ],
+  "evaluate": "2010-01..2011-12",
+  "eval_months": 24,
+  "eval_range_pct": [
+   3.98,
+   5.14
+  ],
+  "eval_months_below_train_min": 24,
+  "eval_months_above_train_max": 0,
+  "eval_6m_change_bps": [
+   -85.0,
+   59.0
+  ],
+  "eval_new_low_months": 8,
+  "train_new_low_months": 9,
+  "regime_shift": true,
+  "why": [
+   "level outside training range in >=25% of months"
+  ]
+ },
+ "2011-12": {
+  "train": "1999-01..2009-12",
+  "train_range_pct": [
+   4.78,
+   8.62
+  ],
+  "train_6m_change_bps": [
+   -168.0,
+   103.0
+  ],
+  "evaluate": "2012-01..2013-12",
+  "eval_months": 24,
+  "eval_range_pct": [
+   3.32,
+   4.51
+  ],
+  "eval_months_below_train_min": 24,
+  "eval_months_above_train_max": 0,
+  "eval_6m_change_bps": [
+   -59.0,
+   111.0
+  ],
+  "eval_new_low_months": 7,
+  "train_new_low_months": 13,
+  "regime_shift": true,
+  "why": [
+   "level outside training range in >=25% of months",
+   "6m rise beyond training max"
+  ]
+ },
+ "2013-12": {
+  "train": "1999-01..2011-12",
+  "train_range_pct": [
+   3.98,
+   8.62
+  ],
+  "train_6m_change_bps": [
+   -168.0,
+   103.0
+  ],
+  "evaluate": "2014-01..2015-12",
+  "eval_months": 24,
+  "eval_range_pct": [
+   3.66,
+   4.48
+  ],
+  "eval_months_below_train_min": 11,
+  "eval_months_above_train_max": 0,
+  "eval_6m_change_bps": [
+   -51.0,
+   32.0
+  ],
+  "eval_new_low_months": 0,
+  "train_new_low_months": 21,
+  "regime_shift": true,
+  "why": [
+   "level outside training range in >=25% of months"
+  ]
+ },
+ "2015-12": {
+  "train": "1999-01..2013-12",
+  "train_range_pct": [
+   3.32,
+   8.62
+  ],
+  "train_6m_change_bps": [
+   -168.0,
+   111.0
+  ],
+  "evaluate": "2016-01..2017-12",
+  "eval_months": 24,
+  "eval_range_pct": [
+   3.42,
+   4.32
+  ],
+  "eval_months_below_train_min": 0,
+  "eval_months_above_train_max": 0,
+  "eval_6m_change_bps": [
+   -53.0,
+   84.0
+  ],
+  "eval_new_low_months": 0,
+  "train_new_low_months": 28,
+  "regime_shift": false,
+  "why": []
+ },
+ "2017-12": {
+  "train": "1999-01..2015-12",
+  "train_range_pct": [
+   3.32,
+   8.62
+  ],
+  "train_6m_change_bps": [
+   -168.0,
+   111.0
+  ],
+  "evaluate": "2018-01..2019-12",
+  "eval_months": 24,
+  "eval_range_pct": [
+   3.58,
+   4.86
+  ],
+  "eval_months_below_train_min": 0,
+  "eval_months_above_train_max": 0,
+  "eval_6m_change_bps": [
+   -82.0,
+   66.0
+  ],
+  "eval_new_low_months": 0,
+  "train_new_low_months": 28,
+  "regime_shift": false,
+  "why": []
+ }
+}
