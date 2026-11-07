@@ -31,8 +31,10 @@ locally (below). New here? Start with the [five-minute walkthrough](docs/WALKTHR
 > on and evaluated once on a sealed holdout. The selected model failed across rate regimes and
 > is **not approved as a forecaster**; the results stay unpublished pending a terms review. A
 > pre-registered forward test waits for months after 2026-06
-> ([ADR 0010](docs/decisions/0010-forward-evaluation-preregistration.md)). Research is frozen
-> after R2 ([ADR 0011](docs/decisions/0011-release-1-0-public-surface-and-scope-freeze.md)).
+> ([ADR 0010](docs/decisions/0010-forward-evaluation-preregistration.md)). A separate
+> modeling research phase, Prepay 2.0, compares the existing models across rate regimes on
+> development data; it serves no real-trained model
+> ([ADR 0013](docs/decisions/0013-real-data-research-product.md)).
 > **Nothing here claims real-world or commercial forecasting accuracy.** See
 > [docs/STATUS.md](docs/STATUS.md).
 

@@ -65,3 +65,27 @@ Fly.io or Cloud Run. Most of their free tiers are also below the container's mea
   the UI (`web/src/static.ts`). Tests pin both.
 - Rebuilding the site means rerunning the pipeline on the `dev` preset. `pages.yml` does this
   on every push to `main`.
+
+## Amendment 1 (2026-11-07): a separate Prepay 2.0 research phase
+
+The owner made the separate decision that §4 requires (ADR 0013, decision record). §4 is
+amended **only** as follows:
+
+1. **A Prepay 2.0 real-data modeling research phase is authorized.** Its objective: compare
+   the existing statistical and ML models rigorously, investigate the documented rate-regime
+   failures, and change the payoff model only where evidence supports a specific change.
+2. **It proceeds in gates, each approved by the owner.** Gate A: repair the failed development
+   queue and specify the first experiment. Each experiment runs only after its
+   pre-registration is accepted. The first is E01, economic generalization (ADR 0014).
+3. **It reuses existing families and data.** It adds no new external economic data. The equity
+   proxy of `docs/research/HPI_EQUITY_PROXY.md` still needs decision O3. A new model family
+   needs its own ADR and owner approval.
+4. **Preserved without change:**
+   - the sealed primary run, its seal and its first evaluation;
+   - the forward registration of 2026-11-02 and its members;
+   - the released B+ product, including its synthetic-only boundary.
+5. **The public product is unchanged by this amendment.** No real-trained model is served or
+   published (ADR 0013, decision D3). A historical research view needs the terms decision and
+   a later owner approval (decision D2).
+
+§1–§3 and §5 are unchanged.

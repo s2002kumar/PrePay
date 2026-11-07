@@ -160,3 +160,18 @@ Previously they were calendar years. The A and B panels share one y-axis maximum
 - No new model families, data sources, financial formulas or features.
 - No valuation, discounting, duration, MBS waterfall or live pricing.
 - No change to the private forward evaluation.
+
+## Amendment 1 (2026-11-07): room for a research view, not a redesign
+
+The B+ Scenario Lab stays as released (#38). This ADR was the final visual milestone of
+Prepay 1.0. For Prepay 2.0 (ADR 0011 amendment 1) it is amended only as follows:
+
+- A later, owner-approved release may regroup the navigation into three areas:
+  - synthetic what-if analysis;
+  - real-data historical evaluation;
+  - technical methodology.
+
+  The proposal is in ADR 0013's decision record.
+- Any new view uses this ADR's visual system unchanged: type, colors, status treatment,
+  model-family brackets, table twins and reconciliation tests.
+- No full redesign is authorized.

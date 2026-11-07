@@ -1,6 +1,7 @@
 # R2 quality-gate report: empirical development evidence and audit readiness
 
-Prepared 2026-10-30, updated 2026-11-02, by the implementing agent. **Self-review, not independent review.**
+Prepared 2026-10-30, updated 2026-11-02 and 2026-11-07 (G15/G16 corrected: the development
+queue stopped on 2026-11-03), by the implementing agent. **Self-review, not independent review.**
 
 **Verdict: the forecasting model is not shown to be accurate and is not production-ready.**
 R2 did three things:
@@ -9,7 +10,9 @@ R2 did three things:
 - prepared the prospective comparison.
 
 None of this produces confirmatory accuracy evidence. That can only come from months after
-2026-06 (ADR 0010). After R2, research is frozen unless the owner decides otherwise (ADR 0011).
+2026-06 (ADR 0010). After R2, research was frozen unless the owner decided otherwise (ADR 0011).
+On 2026-11-07 the owner opened a separate Prepay 2.0 modeling research phase (ADR 0011
+amendment 1, ADR 0013). Its first gate repairs G15 (`docs/reviews/PREPAY_2_GATE_A.md`).
 
 **What the agent saw of private runs.** Under the owner's data-use instruction (ADR 0009 §3),
 real-data jobs ran on the owner's machine through a blind runner. The agent read only:
@@ -49,8 +52,8 @@ therefore "ran; result private", never a number.
 | G12 | Member implementation verification (boolean invariants) | **VERIFIED** (engineering) | `experiment verify`, 2026-11-02 23:23 UTC: DEV2017 and REFIT2026 both `all_pass: true`, no failed checks (exit 0, 1.2 / 2.4 GB peak). The agent read only `all_pass` and the failed-check names |
 | G13 | Prospective comparison registered before any later release | **VERIFIED** | `forward register` exit 0 at 2026-11-02 23:23:51 UTC, after both members verified. The private data lock and store hold release 48 only: no later release had been downloaded. The owner confirms the registration file's contents (protocol step 3) |
 | G14 | Rehearsal of the opening (time, memory) | **VERIFIED** (engineering) | `forward rehearse` on the members' own lock: exit 0, 78 min under host contention, 2.0 GB peak, finished 2026-11-03 00:41 UTC. Its metrics read months the members have seen, so they are not evidence; the agent did not read them |
-| G15 | Rolling-origin development folds (V1) | **IN PROGRESS** (detached queue C) | Started 2026-11-03 00:41 UTC at training fraction 0.1, below-normal priority. `logs/r2/STOP` stops the queue before its next job |
-| G16 | Seed (D7) and loan-sample (D6) stability | **PENDING** (queue C, after G15) | As G15 |
+| G15 | Rolling-origin development folds (V1) | **FAILED** (out of memory, 2026-11-03) → bounded-memory fix in Prepay 2.0 Gate A ([#43](https://github.com/s2002kumar/PrePay/pull/43)); not rerun | Queue C started 2026-11-03 00:41 UTC (worktree `dbcfb1d`, fraction 0.1, below-normal priority). Fold 2007-12 trained and was evaluated (about 02:23 UTC). Fold 2009-12 trained (08:31 UTC). Its evaluation failed about nine minutes later with `numpy._ArrayMemoryError`: B2's dense design (`design.dense` → `hstack`), inside the cohort backtest (`cohort.model_hazards`). Folds 2011-12 to 2017-12 never ran, and no summary was written (it is written after the last fold). No status file exists: the detached runner process, started 2026-10-30, still ran the runner code from before its 2026-11-02 fix and crashed on a printed fold label. The agent learned this on 2026-11-05 from exception class names and code locations only. Cause, fix and measurements: `docs/reviews/PREPAY_2_GATE_A.md` |
+| G16 | Seed (D7) and loan-sample (D6) stability | **NOT RUN**: queue C stopped at G15 before these jobs | Re-planned as part of experiment E01 (ADR 0014, proposed) |
 | G17 | House-price and equity proxies | **BLOCKED** (owner decision O3) | Research done: ELTV rejected (proprietary AVM, no as-of guarantee); state HPI has ALFRED vintages from 2008; real-time vs revised 4-quarter HPA differs by up to 3.94 pp. `docs/research/HPI_EQUITY_PROXY.md`, #26 |
 | G18 | Any candidate more accurate than the sealed model (P1–P4, S1–S7); tolerances T1–T6 | **FORWARD-VALIDATION-PENDING** | First opening needs a release with cutoff ≥ 2027-06 |
 | G19 | The sealed primary model is reliable across rate regimes | **FAILED** | Owner-reported from the private packet |
@@ -73,6 +76,10 @@ therefore "ran; result private", never a number.
 | 9 | Only 12 forward months | Two-way coverage about 0.91 under strong month effects | Stated in every forward report |
 | 10 | B2 (multinomial logistic) exceeds host memory at REFIT scale and the primary fraction | REFIT2026 trains at a 0.05 sampling fraction, below DEV2017's (the primary run's) | Handled by the pre-registered ladder (G11), not by code. B2's fit is scikit-learn's |
 | 11 | The owner's laptop is shared with unrelated work (about 37 GB committed on 15.4 GB) | Wall times, and which ladder fraction fits, depend on unrelated load | Recorded; private jobs run at below-normal priority |
+| 12 | B2 and H1 built their whole dense design for every scoring call of up to 2^19 rows, and the fold evaluation held the full evaluation window and seven models' predictions while it ran the cohort and run-off backtests | Caused G15. At the cohort backtest's 480,000-row chunk, B2's transient alone measured 674 MiB on synthetic data (H1: 586 MiB) | **Fixed** in [#43](https://github.com/s2002kumar/PrePay/pull/43) (Gate A): design-model scoring in 65,536-row blocks (101 MiB and 136 MiB), and the backtests run before the window is loaded. On a synthetic fold all 2,586 reported values are bit-identical before and after |
+| 13 | A failed command wrote no resource report | The G15 failure left no peak memory, so the failure couldn't be sized | **Fixed** in [#43](https://github.com/s2002kumar/PrePay/pull/43): the report is written for every exit, with the exit code |
+| 14 | Peak RSS on Windows is the peak *working set* | On a host that pages heavily, Windows trims working sets, so peak RSS understates what a job committed. Windows refuses allocations at the *commit* limit. The peaks quoted in G9–G14 are working-set peaks | **Fixed** in [#43](https://github.com/s2002kumar/PrePay/pull/43): reports add `peak_commit_bytes` (Windows `PeakPagefileUsage`). Earlier peaks stay as recorded, labeled as working set |
+| 15 | A detached queue keeps the runner code it started with, and the rolling-origin summary is written only after the last fold | G15 lost its status file, and a failure in any fold loses the summary of the folds before it | Open. ADR 0014 (proposed) starts every queue fresh from the fixed runner and adds resume from completed folds (Gate B) |
 
 ## Executable local review protocol
 
