@@ -20,6 +20,7 @@ from prepay.modeling.models import (
     check_simplex,
 )
 from prepay.modeling.train import calibration_decision, hash_fold, select
+from tests.unit.memory import repeat_batch, traced_peak
 
 CODES = {
     "term_bucket": ["15y", "30y"],
@@ -113,10 +114,35 @@ def test_block_scoring_equals_a_single_pass(
     ]
     whole = [m.predict_proba(valid) for m in models]
     monkeypatch.setattr("prepay.modeling.models.PREDICT_BLOCK_ROWS", 997)  # ragged last block
+    monkeypatch.setattr("prepay.modeling.models.DESIGN_BLOCK_ROWS", 991)  # B2's own block size
     for model, expected in zip(models, whole, strict=True):
         # Equal to float64 rounding, not bit-exact: on some CPUs the BLAS/SIMD kernels take a
         # different path for a short final block and round the last bit differently (seen in CI).
         np.testing.assert_allclose(model.predict_proba(valid), expected, rtol=1e-12, atol=1e-15)
+
+
+def test_dense_design_scoring_memory_is_bounded_by_the_block(
+    batches: tuple[PanelBatch, PanelBatch], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R2 gate G15: B2 built its whole design for every call of up to 2^19 rows, so the cohort
+    backtest's 480,000-row chunks needed about 0.75 GB at once. Scoring in design blocks keeps
+    the transient at a block's design, whatever the number of rows."""
+    train, valid = batches
+    pre = Preprocessor.fit(train)
+    model = LogisticModel.fit(train, pre, c_regularization=1.0)
+    block = 2048
+    monkeypatch.setattr("prepay.modeling.models.DESIGN_BLOCK_ROWS", block)
+    long = repeat_batch(valid, 8)  # 64,000 rows: 32 blocks
+    width = len(pre.dense_names())
+    single, single_peak = traced_peak(lambda: model._predict_block(long))  # the pre-fix path
+    blocked, blocked_peak = traced_peak(lambda: model.predict_proba(long))
+    np.testing.assert_allclose(blocked, single, rtol=1e-12, atol=1e-15)
+    full_design = long.rows * width * 8
+    assert single_peak >= full_design  # the old path materialized the full design
+    output = long.rows * 3 * 8
+    # Blocks of output, the concatenated result, and one block's design pieces with headroom.
+    assert blocked_peak <= 3 * output + 4 * block * width * 8
+    assert blocked_peak < single_peak / 4
 
 
 def test_batch_slices_are_views_and_clusters_follow_loans(
