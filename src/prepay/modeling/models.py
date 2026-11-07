@@ -49,22 +49,37 @@ def softmax(z: FloatArray) -> FloatArray:
     return np.asarray(e / e.sum(axis=1, keepdims=True), dtype=np.float64)
 
 
-#: Rows scored per block. Bounds the transient memory of design matrices (B2) and LightGBM input
-#: when whole holdout windows (millions of rows) are scored.
+#: Rows scored per block. Bounds the transient memory of LightGBM input when whole holdout
+#: windows (millions of rows) are scored.
 PREDICT_BLOCK_ROWS = 1 << 19
+#: Rows per block for models that build a dense design matrix (B2 here, H1 in
+#: :mod:`prepay.modeling.challengers`). Their transient memory grows with block rows x design
+#: width: the cohort backtests score 20,000 loans x 24 months = 480,000 rows in one call, and
+#: B2's full design for those rows was being built at once when a development fold ran out of
+#: memory (R2 gate G15, 2026-11-03). At this size B2's design is about 50 MB.
+DESIGN_BLOCK_ROWS = 1 << 16
 
 
 class HazardModel(ABC):
     family: ClassVar[str]
 
+    def _block_rows(self) -> int:
+        """Rows per scoring block; models with a dense design use :data:`DESIGN_BLOCK_ROWS`."""
+        return PREDICT_BLOCK_ROWS
+
     def predict_proba(self, batch: PanelBatch) -> FloatArray:
-        """Month-t class probabilities, scored in row blocks of bounded memory."""
-        if batch.rows <= PREDICT_BLOCK_ROWS:
+        """Month-t class probabilities, scored in row blocks of bounded memory.
+
+        Rows are scored independently, so blocking changes no probability beyond float64
+        rounding in the matrix products.
+        """
+        step = self._block_rows()
+        if batch.rows <= step:
             return self._predict_block(batch)
         return np.concatenate(
             [
-                self._predict_block(batch.slice(start, start + PREDICT_BLOCK_ROWS))
-                for start in range(0, batch.rows, PREDICT_BLOCK_ROWS)
+                self._predict_block(batch.slice(start, start + step))
+                for start in range(0, batch.rows, step)
             ]
         )
 
@@ -177,6 +192,9 @@ class LogisticModel(HazardModel):
         model = LogisticRegression(C=c_regularization, max_iter=5000, tol=1e-7)
         model.fit(pre.dense(batch), batch.outcome_class)
         return cls(pre, model.coef_.tolist(), model.intercept_.tolist(), c_regularization)
+
+    def _block_rows(self) -> int:
+        return DESIGN_BLOCK_ROWS
 
     def _predict_block(self, batch: PanelBatch) -> FloatArray:
         z = self.preprocessor.dense(batch) @ np.asarray(self.coef).T + np.asarray(self.intercept)
