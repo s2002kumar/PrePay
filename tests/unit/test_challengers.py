@@ -254,6 +254,30 @@ def test_candidates_round_trip_through_the_registry(
     assert not list(tmp_path.rglob("*.pkl"))
 
 
+def test_h1_scores_in_design_blocks_with_bounded_memory(
+    world: tuple[PanelBatch, PanelBatch, Preprocessor],
+    fitted: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """H1 scores one design chunk per block, so a call never holds the full payoff and credit
+    designs (R2 gate G15). The probabilities equal a single pass to float64 rounding."""
+    from prepay.modeling import challengers
+    from tests.unit.memory import repeat_batch, traced_peak
+
+    _, valid, _ = world
+    model = fitted["H1_constrained_hazard"]
+    assert isinstance(model, ConstrainedHazard)
+    block = 2048
+    monkeypatch.setattr(challengers, "DESIGN_CHUNK_ROWS", block)
+    long = repeat_batch(valid, 5)  # 60,000 rows
+    single, single_peak = traced_peak(lambda: model._predict_block(long))  # the pre-fix path
+    blocked, blocked_peak = traced_peak(lambda: model.predict_proba(long))
+    np.testing.assert_allclose(blocked, single, rtol=1e-12, atol=1e-15)
+    width = len(model.design.payoff_center) + len(model.design.credit_center)
+    assert single_peak >= long.rows * width * 8  # both full designs at once
+    assert blocked_peak < single_peak / 4
+
+
 def test_h1_chunked_design_equals_the_full_computation(
     world: tuple[PanelBatch, PanelBatch, Preprocessor], monkeypatch: pytest.MonkeyPatch
 ) -> None:

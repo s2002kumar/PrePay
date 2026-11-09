@@ -56,3 +56,44 @@ def test_cli_writes_resource_report_when_requested(
     measured = json.loads(report.read_text())
     assert measured["peak_rss_bytes"] > 0
     assert measured["seconds"] >= 0
+    assert measured["exit_code"] == 0
+    assert (measured["peak_commit_bytes"] is None) == (sys.platform != "win32")
+
+
+def test_cli_writes_resource_report_when_the_command_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A job that fails (for example, out of memory) still leaves its duration and peaks (G15)."""
+    report = tmp_path / "report.json"
+    monkeypatch.setenv("PREPAY_RESOURCE_REPORT", str(report))
+    code = main(
+        ["data-lock", "verify", "--raw-dir", str(tmp_path), "--lock", str(tmp_path / "none.json")]
+    )
+    assert code == 1
+    measured = json.loads(report.read_text())
+    assert measured["exit_code"] == 1
+    assert measured["peak_rss_bytes"] > 0
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="commit charge is a Windows measure")
+def test_peak_commit_grows_with_committed_allocation() -> None:
+    # Committed but never touched: the commit charge rises although the working set need not.
+    script = (
+        "from prepay.resources import peak_commit_bytes\n"
+        "before = peak_commit_bytes()\n"
+        "block = bytearray(64 * 2**20)\n"
+        "print(before, peak_commit_bytes())\n"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=True
+    ).stdout.split()
+    before, after = int(out[0]), int(out[1])
+    assert before > 0
+    assert after >= before + 60 * 2**20
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="off Windows there is no commit measure")
+def test_peak_commit_is_none_off_windows() -> None:
+    from prepay.resources import peak_commit_bytes
+
+    assert peak_commit_bytes() is None

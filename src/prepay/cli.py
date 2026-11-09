@@ -976,17 +976,25 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _write_resource_report(started: float) -> None:
-    """Record this command's duration and peak RSS when a benchmark asks for it."""
+def _write_resource_report(started: float, exit_code: int) -> None:
+    """Record this command's duration and peak memory when a benchmark or runner asks for it.
+
+    Written for failed commands too, so a job that runs out of memory still leaves its peak.
+    """
     target = os.environ.get("PREPAY_RESOURCE_REPORT")
     if not target:
         return
     from prepay.io import write_json_atomic
-    from prepay.resources import peak_rss_bytes
+    from prepay.resources import peak_commit_bytes, peak_rss_bytes
 
     write_json_atomic(
         Path(target),
-        {"seconds": round(time.perf_counter() - started, 3), "peak_rss_bytes": peak_rss_bytes()},
+        {
+            "seconds": round(time.perf_counter() - started, 3),
+            "peak_rss_bytes": peak_rss_bytes(),
+            "peak_commit_bytes": peak_commit_bytes(),
+            "exit_code": exit_code,
+        },
     )
 
 
@@ -996,12 +1004,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     logs.configure(args.log_level)
     handler: Callable[[argparse.Namespace], int] = args.handler
     started = time.perf_counter()
+    code = 1
     try:
         code = handler(args)
     except Exception:
         log.exception("command failed", extra={"command": args.command})
-        return 1
-    _write_resource_report(started)
+        code = 1
+    finally:
+        _write_resource_report(started, code)
     return code
 
 

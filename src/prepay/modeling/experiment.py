@@ -488,7 +488,31 @@ def evaluate_development(
 
     Metrics, paired differences vs B2 and M1, calibration by public-rate regime (D4), and the
     cohort and run-off backtests at ``t0`` = the fold origin with error attribution (D5).
+
+    The backtests run first. They need only loan statics and the cohort, so the evaluation
+    window and every model's predictions are not held while they run; the peak is the larger of
+    the two phases rather than their sum (R2 gate G15). The computations are independent, so the
+    order changes no reported number. ``stages`` lists each phase in order, with its time and the
+    process peaks after it (a list, because the report's JSON keys are sorted).
     """
+    from prepay.resources import peak_commit_bytes, peak_rss_bytes
+
+    stages: list[dict[str, str | float | int | None]] = []
+    clock = time.perf_counter()
+
+    def stage(name: str) -> None:
+        nonlocal clock
+        now = time.perf_counter()
+        stages.append(
+            {
+                "stage": name,
+                "seconds": round(now - clock, 1),
+                "peak_rss_bytes": peak_rss_bytes(),
+                "peak_commit_bytes": peak_commit_bytes(),
+            }
+        )
+        clock = now
+
     run = load_run(run_dir)
     manifest = run.manifest
     window_json = manifest["windows"].get("evaluate")
@@ -500,19 +524,24 @@ def evaluate_development(
     con: duckdb.DuckDBPyConnection = duckdb.connect(str(warehouse_path(data_root)), read_only=True)
     try:
         rates = warehouse_rates(con)
-        batch = augment(read_window(con, window), rates)
         calibrated = {name: run.calibrated(name) for name in run.models}
-        predictions = {name: model.predict_proba(batch) for name, model in calibrated.items()}
         history = rate_path_from_bronze(data_root / "bronze")
         access = DevelopmentAccess()
+        stage("load")
         cohort = cohort_backtest(
             con, calibrated, history, first - 1, seal=access, cutoff_month=last
         )
+        stage("cohort_backtest")
         runoff = runoff_backtest(
             con, calibrated, history, first - 1, seal=access, cutoff_month=last
         )
+        stage("runoff_backtest")
+        batch = augment(read_window(con, window), rates)
+        stage("read_window")
     finally:
         con.close()
+    predictions = {name: model.predict_proba(batch) for name, model in calibrated.items()}
+    stage("predict")
     results = {name: metrics.evaluate(batch, p) for name, p in predictions.items()}
     paired = {
         name: {
@@ -527,6 +556,7 @@ def evaluate_development(
         name: segment_report(batch, {name: p}, selected=name, dimensions=dimensions)
         for name, p in predictions.items()
     }
+    stage("metrics")
     return {
         "kind": "prepay-development-evaluation",
         "evidence_class": evidence,
@@ -543,6 +573,7 @@ def evaluate_development(
         "cohort_attribution": cohort_attribution(cohort),
         "runoff_backtest": runoff,
         "runoff_attribution": runoff_attribution(runoff),
+        "stages": stages,
     }
 
 
