@@ -46,8 +46,8 @@ served or published (decision D3).
 
 | Gate | Scope | Status | Evidence |
 |---|---|---|---|
-| A | Audit the failed development queue (G15); bounded-memory fix; correct G15/G16; E01 specification; draft inquiry to Freddie Mac | **done, in owner review**. Synthetic evidence only; no private job was launched | `docs/reviews/PREPAY_2_GATE_A.md`, [#43](https://github.com/s2002kumar/PrePay/pull/43), ADR 0014 (proposed) |
-| B | E01 code (resume, B0 in folds, dependence-aware calibration intervals, per-fold probes, aggregator) and a synthetic dry run | not started; waits for approval of ADR 0014 | — |
+| A | Audit the failed development queue (G15); bounded-memory fix; correct G15/G16; E01 specification; draft inquiry to Freddie Mac | **done** 2026-11-07, approved by the owner 2026-11-09. Fix merged ([#43](https://github.com/s2002kumar/PrePay/pull/43)). Synthetic evidence only; no private job was launched | `docs/reviews/PREPAY_2_GATE_A.md`, [#43](https://github.com/s2002kumar/PrePay/pull/43), ADR 0014 (accepted with revisions 2026-11-09) |
+| B | E01 code (resume, B0 in folds, dependence-aware calibration intervals, per-fold probes, aggregator) and a synthetic dry run | approved 2026-11-09 (E01-D6), in progress. Synthetic engineering only; no private job | ADR 0014 §9.2 |
 | C | Owner-run pilot fold with reproduction and memory gates | not started | — |
 | D | E01 folds and stability (G15, G16) | not started | — |
 | — | Historical research page (decision D2) | deferred until E01's findings; data contract to follow E01's report schema | ADR 0013 |

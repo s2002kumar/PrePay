@@ -14,7 +14,7 @@ in Gate A**.
 | Audit the failed queue | Done. Root cause identified from the code and the runner's sanitized failure summary (§1) |
 | Implement and test the bounded-memory correction | Done: [#43](https://github.com/s2002kumar/PrePay/pull/43). Every reported value of a synthetic fold is bit-identical before and after. Scoring transients fall by 77–85%, and the evaluation's peak commit above baseline falls from 0.86 to 0.47 GB (§2, §3) |
 | Correct the stale G15/G16 status | Done. G15 is FAILED and G16 NOT RUN in the R2 report; `STATUS.md`, the README and the 1.0 acceptance report are corrected (§4) |
-| Prepare the exact E01 execution specification | Done: ADR 0014 (proposed). Regime-shift folds are fixed now from public rates (§5) |
+| Prepare the exact E01 execution specification | Done: ADR 0014 (proposed then; accepted with revisions on 2026-11-09). Regime-shift folds are fixed now from public rates (§5) |
 | Inquiry to Freddie Mac (D1) | Drafted in the owner's private notes, **not sent** |
 
 Not done, as instructed:
@@ -107,7 +107,7 @@ provenance.
 | Change | File | Why it changes no number |
 |---|---|---|
 | Models with a dense design score in blocks of 65,536 rows: B2 (`DESIGN_BLOCK_ROWS`) and H1 (one design chunk per block). LightGBM families keep 2^19 | `modeling/models.py`, `modeling/challengers.py` | Rows are scored independently. The design rows are identical; only the matrix product is split. B2 is bit-identical on the measured chunk. H1 differs by at most 6.7e-16 in probability (float64 rounding). The existing block test now also forces ragged design blocks |
-| The fold evaluation runs the cohort and run-off backtests **before** it loads the evaluation window and the predictions. It records each stage's seconds, peak working set and peak commit in `stages` | `modeling/experiment.py` | The backtests use only statics, the cohort and the rate paths, with their own fixed seeds. Their computations are independent of the window and the predictions |
+| The fold evaluation runs the cohort and run-off backtests **before** it loads the evaluation window and the predictions. After each stage it records the elapsed seconds and the process's cumulative peak working set and peak commit in `stages`. These are high-water marks, not per-stage peaks | `modeling/experiment.py` | The backtests use only statics, the cohort and the rate paths, with their own fixed seeds. Their computations are independent of the window and the predictions |
 | The resource report is written for **every** exit, with `exit_code`, and adds `peak_commit_bytes` (Windows `PeakPagefileUsage`; `None` elsewhere) | `cli.py`, `resources.py` | Measurement only |
 
 The forward evaluator (`evaluation/forward.py`) and the sealed lockbox (`modeling/lockbox.py`)
