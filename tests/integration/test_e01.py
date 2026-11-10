@@ -144,6 +144,7 @@ def test_ledger_holds_metadata_only(e01_root: Path) -> None:
         "projected_peak_bytes",
         "reproduction",
         "run_id",
+        "verification",
     }
     for job in ledger["jobs"]:
         assert set(job) <= allowed, set(job) - allowed
@@ -155,6 +156,10 @@ def test_ledger_holds_metadata_only(e01_root: Path) -> None:
         "summary",
     ]
     assert all("projected_peak_bytes" in j for j in ledger["jobs"][2:4])
+    for job in (j for j in ledger["jobs"] if j["job"].startswith("fold")):
+        # Implementation booleans ran in a child after every fold; only check names are kept.
+        assert job["verification"]["gating_failures"] == []
+        assert set(job["verification"]["failed_checks"]) <= {"clean_code"}
 
 
 def test_summary_classifies_every_family_comparison_and_computes_the_rules(
@@ -293,8 +298,12 @@ def test_orchestrator_stops_on_stop_file_preflight_budget_and_mismatch(
     root, lock = built
     lock_path = _lock_file(lock, tmp_path / "lock.json")
 
-    def fake_spawn(peak: int) -> e01_run.Spawn:
+    def fake_spawn(peak: int, failed: list[str] | None = None) -> e01_run.Spawn:
         def spawn(args: list[str], report: Path) -> int:
+            if "verify" in args:  # the implementation-check child writes its own report
+                out = Path(args[args.index("--out") + 1])
+                out.write_text(json.dumps({"failed": failed or []}))
+                return 2 if failed else 0
             report.write_text(json.dumps({"peak_rss_bytes": peak, "peak_commit_bytes": peak}))
             return 0
 
@@ -324,6 +333,16 @@ def test_orchestrator_stops_on_stop_file_preflight_budget_and_mismatch(
 
     heavy = options(tmp_path / "budget", budget_bytes=100)
     assert e01_run.run(heavy, spawn=fake_spawn(101)) == e01_run.EXIT_BUDGET
+
+    # A failed implementation check stops the queue; a dirty tree alone doesn't, on synthetic data.
+    checked = tmp_path / "checked"
+    shutil.copytree(e01_root / "folds", checked / "folds")
+    broken = options(checked, budget_bytes=2**62)
+    assert e01_run.run(broken, spawn=fake_spawn(1, ["M1_lightgbm.coherent"])) == e01_run.EXIT_VERIFY
+    record = read_json(checked / e01_run.LEDGER)["jobs"][-1]
+    assert record["outcome"] == "verification_failed"
+    assert record["verification"]["gating_failures"] == ["M1_lightgbm.coherent"]
+    assert e01_run.run(broken, spawn=fake_spawn(1, ["clean_code"])) == e01_run.EXIT_OK
 
     # A pilot whose model files differ from the reference stops, and the folds wait for a waiver.
     mismatch = tmp_path / "mismatch"

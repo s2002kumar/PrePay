@@ -10,7 +10,10 @@ code from before a change (R2 defect 15). Before each job the orchestrator:
    the projection exceeds the budget.
 
 After each job it records the child's resource report and stops on a failure or on a peak above
-the budget. After the pilot fold it compares model-file digests with the V1 run of the same
+the budget. After each fold it runs ``prepay experiment verify --unsealed`` as another child: the
+boolean implementation checks (coherent simplex, bit-identical reload, rate-level invariance,
+monotone hazards, derived-feature parity) must pass, and only the names of failed checks reach
+the ledger. After the pilot fold it also compares model-file digests with the V1 run of the same
 origin. A mismatch stops the queue, and the later folds run only after the owner records a
 written waiver. Nothing is waived silently (E01-D5).
 
@@ -39,7 +42,6 @@ from typing import Any
 
 import duckdb
 
-from prepay import periods
 from prepay.features.panel import sample_clause
 from prepay.ingest.lock import DataLock, read_lock
 from prepay.io import read_json, write_json_atomic
@@ -74,6 +76,10 @@ EXIT_BUDGET = 4
 EXIT_REPRODUCTION = 5
 EXIT_STOPPED = 6
 EXIT_PROJECTION = 7
+EXIT_VERIFY = 8
+#: Verification checks that don't gate a synthetic run: tests and dry runs may use a working
+#: tree with edits. Real data never gets that far with a dirty tree (find_or_run refuses it).
+SYNTHETIC_NON_GATING = ("clean_code",)
 STAGES = ("pilot", "folds", "stability", "all")
 
 
@@ -404,19 +410,54 @@ def _run_job(
     if not record["within_budget"]:
         record["outcome"] = "over_budget"
         return EXIT_BUDGET
-    if job.kind == "fold" and job.arg == pilot_origin and options.reproduce_against is not None:
+    if job.kind == "fold":
         e01_run = find_run(folds_dir(options.root), lock, fold_config(job.arg, overrides))
         if e01_run is None:
-            raise E01Error("the pilot finished but its run directory is missing")
-        check = reproduction(e01_run, options.reproduce_against, job.arg, lock)
-        record["reproduction"] = check
+            raise E01Error(f"fold {job.arg} finished but its run directory is missing")
         record["run_id"] = e01_run.name
-        if not check["identical"] and ledger["waiver"] is None:
-            record["outcome"] = "reproduction_mismatch"
-            return EXIT_REPRODUCTION
+        verification = _verify(e01_run, job, options, lock, spawn)
+        record["verification"] = verification
+        if verification["gating_failures"]:
+            record["outcome"] = "verification_failed"
+            return EXIT_VERIFY
+        if job.arg == pilot_origin and options.reproduce_against is not None:
+            check = reproduction(e01_run, options.reproduce_against, job.arg, lock)
+            record["reproduction"] = check
+            if not check["identical"] and ledger["waiver"] is None:
+                record["outcome"] = "reproduction_mismatch"
+                return EXIT_REPRODUCTION
     record["outcome"] = "ok"
     return EXIT_OK
 
 
-def origin_month(origin: str) -> int:
-    return periods.parse_iso(origin)
+def _verify(
+    run_dir: Path, job: Job, options: Options, lock: DataLock, spawn: Spawn
+) -> dict[str, Any]:
+    """``prepay experiment verify --unsealed`` in a child; returns failed check names only."""
+    out = options.root / JOBS / f"verify-{job.arg}.json"
+    out.unlink(missing_ok=True)
+    args = [
+        "--log-level",
+        options.log_level,
+        "experiment",
+        "verify",
+        "--run",
+        str(run_dir),
+        "--data-root",
+        str(options.data_root),
+        "--lock",
+        str(options.lock_path),
+        "--out",
+        str(out),
+        "--unsealed",
+    ]
+    code = spawn(args, options.root / JOBS / f"verify-{job.arg}.resource.json")
+    if not out.is_file():
+        return {"exit_code": code, "failed_checks": [], "gating_failures": ["no_report"]}
+    failed = list(read_json(out)["failed"])
+    exempt = SYNTHETIC_NON_GATING if lock.synthetic else ()
+    return {
+        "exit_code": code,
+        "failed_checks": failed,
+        "gating_failures": [name for name in failed if name not in exempt],
+    }

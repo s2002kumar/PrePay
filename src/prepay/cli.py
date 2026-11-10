@@ -446,7 +446,11 @@ def _cmd_experiment_verify(args: argparse.Namespace) -> int:
     from prepay.modeling.verify import verify_run
 
     report = verify_run(
-        Path(args.run), Path(args.data_root), read_lock(Path(args.lock)), preset_name=args.preset
+        Path(args.run),
+        Path(args.data_root),
+        read_lock(Path(args.lock)),
+        preset_name=args.preset,
+        require_seal=not args.unsealed,
     )
     write_json_atomic(Path(args.out), report)
     _emit({"out": args.out, "all_pass": report["all_pass"], "failed": report["failed"]})
@@ -865,6 +869,11 @@ def build_parser() -> argparse.ArgumentParser:
     exp_verify.add_argument("--lock", required=True)
     exp_verify.add_argument("--preset", choices=["DEV2017", "REFIT2026"])
     exp_verify.add_argument("--out", required=True, help="JSON report path")
+    exp_verify.add_argument(
+        "--unsealed",
+        action="store_true",
+        help="omit the seal check, for runs never sealed by design (E01 folds)",
+    )
     exp_verify.set_defaults(handler=_cmd_experiment_verify)
     exp_roll = experiment_sub.add_parser(
         "rolling-origin",
@@ -895,8 +904,8 @@ def build_parser() -> argparse.ArgumentParser:
             "ledger. Stops on the STOP file, a failed preflight, a failure, a peak above the "
             "budget, a projection above it, or a pilot whose model files differ from the V1 "
             "run. Exit codes: 0 done, 1 job failed, 3 preflight, 4 budget, 5 reproduction, "
-            "6 STOP file, 7 projection. Real data: run 'pilot' first, then 'folds' and "
-            "'stability'; 'all' is for synthetic data only."
+            "6 STOP file, 7 projection, 8 verification. Real data: run 'pilot' first, then "
+            "'folds' and 'stability'; 'all' is for synthetic data only."
         ),
     )
     e01_run.add_argument("--stage", required=True, choices=["pilot", "folds", "stability", "all"])
