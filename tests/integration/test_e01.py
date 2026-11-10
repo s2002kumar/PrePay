@@ -196,9 +196,19 @@ def test_local_report_is_deterministic_and_labeled(e01_root: Path) -> None:
     assert PRIVATE_BANNER not in text
     assert "Development evidence (E1), exploratory" in text
     assert "not evidence of equivalence" in text
-    assert (e01_root / e01.REPORT).read_text(encoding="utf-8").strip() == text.strip()
+    # Byte-identical on every platform: no CRLF on Windows.
+    assert (e01_root / e01.REPORT).read_bytes() == text.encode("utf-8")
     real = {**summary, "synthetic": False}
     assert PRIVATE_BANNER in render_report(real)
+
+
+def test_report_bytes_do_not_depend_on_platform(tmp_path: Path) -> None:
+    """An E01 directory with no folds yet still gets a report, written with LF line endings."""
+    e01.write_summary(tmp_path)
+    assert read_json(tmp_path / e01.SUMMARY)["complete"] is False
+    report = (tmp_path / e01.REPORT).read_bytes()
+    assert b"\r" not in report
+    assert report == render_report(read_json(tmp_path / e01.SUMMARY)).encode("utf-8")
 
 
 def test_a_finished_fold_is_reused_without_retraining(

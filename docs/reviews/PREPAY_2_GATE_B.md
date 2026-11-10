@@ -162,6 +162,7 @@ attempt:
 | 3 | `2d8fa06` | the folds stage stopped at fold 2011-12 (exit 7) | The projection scaled about 1.4 GiB of library imports with the data: 5.49 and 10.15 GiB projected against at most 1.88 GiB measured. The fix is a post-import baseline (`067edd0`) |
 | 4 | `067edd0` | complete: 6 folds and S1, all exit 0 | Fold 2015-12's wall time (12.7 h) includes 12.5 h of Modern Standby (Windows System log: standby 20:38–09:10 local); about 13 min active. The job survived standby |
 | — | `067edd0` | private runner test | The runner's E01 queue worked end to end from a fresh worktree. The 12 GiB preflight then waited, and the STOP file couldn't interrupt that wait. Fixed in `398ce76`. Rerun from `398ce76`, the runner refused to reuse folds made by `067edd0` (`ProvenanceError`), as designed |
+| — | `398ce76` | review of the dry-run outputs | On Windows the local report was written with CRLF line endings (60 in an empty-directory report), so its bytes differed from a Linux run. It is now written with LF, as the rest of the repository's writers are; a test that needs no training checks the bytes. No number or wording changes |
 
 **Numerical neutrality of the refactor.** I evaluated the synthetic V1 fold 2009-12 of Gate A
 with `main` before Gate B (`18c94a7`) and with `067edd0`. All **2,586** reported values are

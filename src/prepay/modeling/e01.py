@@ -857,5 +857,5 @@ def write_summary(
     summary = summarize(root, origins=origins, ledger=ledger)
     target = root / SUMMARY
     write_json_atomic(target, summary)
-    (root / REPORT).write_text(render_report(summary), encoding="utf-8")
+    (root / REPORT).write_text(render_report(summary), encoding="utf-8", newline="\n")
     return target
