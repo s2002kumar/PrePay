@@ -267,9 +267,16 @@ def _row_counts(data_root: Path, origin: str, overrides: Overrides) -> tuple[int
 def projected_peak(
     pilot: dict[str, Any], pilot_rows: tuple[int, int], fold_rows: tuple[int, int]
 ) -> int:
-    """Conservative projection (ADR 0014 §9.3): everything above the pilot's starting commit is
-    scaled by the largest row ratio. Whole-job peaks only; stage figures are never used."""
-    start = int(pilot.get("start_commit_bytes") or 0)
+    """Conservative projection (ADR 0014 §9.3): everything above the pilot's baseline is scaled by
+    the largest row ratio. Whole-job peaks only; stage figures are never used.
+
+    The baseline is the job's commit after its libraries are imported and before it reads data
+    (``baseline_commit_bytes``). Gate B's dry run showed why: measured from the command's start,
+    about 1.4 GiB of library imports was scaled as if it grew with the data, and the gate stopped
+    a fold projected at 10.2 GiB whose neighbours peaked under 1.9 GiB. Without a baseline (off
+    Windows), the whole peak is scaled, which over-projects further.
+    """
+    start = int(pilot.get("baseline_commit_bytes") or pilot.get("start_commit_bytes") or 0)
     peak = int(pilot["job_peak_bytes"])
     ratios = [f / p for f, p in zip(fold_rows, pilot_rows, strict=True) if p > 0]
     scale = max([1.0, *ratios])
@@ -444,7 +451,12 @@ def _run_job(
     record["exit_code"] = code
     record["seconds"] = round(time.perf_counter() - started, 1)
     resources: dict[str, Any] = read_json(report_path) if report_path.is_file() else {}
-    for key in ("peak_commit_bytes", "peak_rss_bytes", "start_commit_bytes"):
+    for key in (
+        "peak_commit_bytes",
+        "peak_rss_bytes",
+        "start_commit_bytes",
+        "baseline_commit_bytes",
+    ):
         record[key] = resources.get(key)
     record["job_peak_bytes"] = job_peak_bytes(resources) if resources else None
     record["within_budget"] = (

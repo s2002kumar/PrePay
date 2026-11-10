@@ -58,6 +58,7 @@ def test_cli_writes_resource_report_when_requested(
     assert measured["seconds"] >= 0
     assert measured["exit_code"] == 0
     assert (measured["peak_commit_bytes"] is None) == (sys.platform != "win32")
+    assert measured["baseline_commit_bytes"] is None  # only E01 model jobs mark a baseline
 
 
 def test_cli_writes_resource_report_when_the_command_fails(

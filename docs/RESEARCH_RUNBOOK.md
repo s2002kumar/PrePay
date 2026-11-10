@@ -296,7 +296,11 @@ uv run --frozen prepay experiment e01 run --stage stability --data-root <data-ro
 - **After every fold,** `prepay experiment verify --unsealed` runs in its own process: coherent
   probabilities, bit-identical reload, rate-level invariance, monotone hazards, derived-feature
   parity. Only the names of failed checks reach the ledger.
-- **To stop before the next job,** create the empty file `<out>/STOP`.
+- **To stop before the next job,** create the empty file `<out>/STOP`. Don't close the terminal
+  to stop E01: on Windows its child processes keep running. To stop at once, end the whole
+  process tree (`taskkill /T /F /PID <pid of e01 run>`). Only one `e01 run` may use a directory:
+  it holds `<out>/.e01-run.lock`, and a run stopped by force leaves it behind. Delete it only
+  after checking that no E01 process is running.
 - **After a pilot identity mismatch (exit 5),** investigate first. To continue anyway, the owner
   records a written reason with `--waive-reproduction-mismatch "<reason>"`. The ledger and the
   summary keep that reason.

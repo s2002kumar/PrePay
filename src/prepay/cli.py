@@ -397,9 +397,23 @@ def _cmd_e01_run(args: argparse.Namespace) -> int:
     return code
 
 
+def _import_heavy_libraries() -> None:
+    """Import every library a model job uses, then mark the job's memory baseline."""
+    import lightgbm  # noqa: F401
+    import pyarrow  # noqa: F401
+    import scipy.interpolate  # noqa: F401
+    import sklearn.linear_model  # noqa: F401
+
+    from prepay.resources import mark_baseline
+
+    mark_baseline()
+
+
 def _cmd_e01_fold(args: argparse.Namespace) -> int:
     from prepay.ingest.lock import read_lock
     from prepay.modeling.e01 import Overrides, run_fold
+
+    _import_heavy_libraries()
 
     run_dir, status = run_fold(
         Path(args.data_root),
@@ -415,6 +429,8 @@ def _cmd_e01_fold(args: argparse.Namespace) -> int:
 def _cmd_e01_stability(args: argparse.Namespace) -> int:
     from prepay.ingest.lock import read_lock
     from prepay.modeling.e01 import Overrides, run_stability
+
+    _import_heavy_libraries()
 
     target = run_stability(
         Path(args.data_root),
@@ -1120,7 +1136,7 @@ def _write_resource_report(started: float, exit_code: int, start_commit: int | N
     if not target:
         return
     from prepay.io import write_json_atomic
-    from prepay.resources import peak_commit_bytes, peak_rss_bytes
+    from prepay.resources import baseline_commit_bytes, peak_commit_bytes, peak_rss_bytes
 
     write_json_atomic(
         Path(target),
@@ -1129,6 +1145,7 @@ def _write_resource_report(started: float, exit_code: int, start_commit: int | N
             "peak_rss_bytes": peak_rss_bytes(),
             "peak_commit_bytes": peak_commit_bytes(),
             "start_commit_bytes": start_commit,
+            "baseline_commit_bytes": baseline_commit_bytes(),
             "exit_code": exit_code,
         },
     )

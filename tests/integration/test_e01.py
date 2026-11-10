@@ -138,6 +138,7 @@ def test_ledger_holds_metadata_only(e01_root: Path) -> None:
         "peak_commit_bytes",
         "peak_rss_bytes",
         "start_commit_bytes",
+        "baseline_commit_bytes",
         "job_peak_bytes",
         "within_budget",
         "free_commit_before_bytes",
@@ -366,10 +367,13 @@ def test_orchestrator_stops_on_stop_file_preflight_budget_and_mismatch(
         e01_run.run(folds, spawn=fake_spawn(1))
 
 
-def test_projection_scales_everything_above_the_start_by_the_largest_ratio() -> None:
-    pilot = {"start_commit_bytes": 1_000, "job_peak_bytes": 3_000}
+def test_projection_scales_everything_above_the_baseline_by_the_largest_ratio() -> None:
+    pilot = {"start_commit_bytes": 10, "baseline_commit_bytes": 1_000, "job_peak_bytes": 3_000}
     assert e01_run.projected_peak(pilot, (100, 50), (300, 100)) == 1_000 + 2_000 * 3
     assert e01_run.projected_peak(pilot, (100, 50), (50, 25)) == 3_000  # never scaled down
+    # Without a post-import baseline the start is used, and fixed costs are scaled too.
+    early = {"start_commit_bytes": 10, "job_peak_bytes": 3_000}
+    assert e01_run.projected_peak(early, (100, 50), (300, 100)) == 10 + 2_990 * 3
 
 
 def test_design_bundles_cover_every_design_pair() -> None:

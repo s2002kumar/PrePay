@@ -54,6 +54,20 @@ def commit_now_bytes() -> int | None:
         return None
 
 
+_baseline_commit: int | None = None
+
+
+def mark_baseline() -> None:
+    """Record the commit charge now, once the job's libraries are imported and before any data
+    is read: the fixed process cost that E01's resource projection doesn't scale."""
+    global _baseline_commit
+    _baseline_commit = commit_now_bytes()
+
+
+def baseline_commit_bytes() -> int | None:
+    return _baseline_commit
+
+
 def free_commit_bytes() -> int | None:
     """Memory the host can still commit, in bytes, for a preflight before a heavy job.
 
