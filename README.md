@@ -1,15 +1,15 @@
-# Prepay — mortgage cash-flow modeling
+# PrePay — mortgage prepayment models and cash-flow simulation
 
 **When will a mortgage pool return its principal if rates move?** Prepay models, month by month,
 whether each fixed-rate loan pays off early, exits through a credit disposition, or stays
 active. It then turns those probabilities into an audited cash-flow ledger for hypothetical
 pools under interest-rate scenarios.
 
-**ML and data engineering:** competing-risk modeling with LightGBM, logistic and
-other baselines; point-in-time features, temporal validation, streaming ingest,
-dbt transformations, and an auditable finance engine. The public model and
-demo are synthetic. A separately evaluated real-data model did not pass
-rate-regime checks, so this is **not a validated forecasting system**.
+**What I built:** an end-to-end competing-risk modeling pipeline (LightGBM, logistic and
+benchmark models), point-in-time feature generation, temporal validation, streaming ingestion,
+dbt transformations, and a cash-flow engine with auditable accounting checks.
+The **public demo uses synthetic data and a synthetic-trained model**. Real-data research is
+separate and has not been released as a validated forecasting product ([research status](docs/STATUS.md)).
 
 [![ci](https://github.com/s2002kumar/PrePay/actions/workflows/ci.yml/badge.svg)](https://github.com/s2002kumar/PrePay/actions/workflows/ci.yml)
 [![pages](https://github.com/s2002kumar/PrePay/actions/workflows/pages.yml/badge.svg)](https://github.com/s2002kumar/PrePay/actions/workflows/pages.yml)
@@ -20,7 +20,7 @@ the published site in a browser after it. Custom rate paths need the live app, w
 locally (below). New here? Start with the [five-minute walkthrough](docs/WALKTHROUGH.md).
 
 > **Prepay 1.0 (2026-11-02).** The [1.0 acceptance report](docs/reviews/RELEASE_1.0_ACCEPTANCE.md)
-> records which criteria passed, the evidence for each, and what still blocks release.
+> records passed criteria, supporting evidence, and the remaining boundaries of the public-demo release.
 > Public surfaces:
 > - **The public demo** is a static GitHub Pages build. The real API computed every response,
 >   and the build checked each one against it.
@@ -155,8 +155,8 @@ and `main` requires all checks. Measured baseline: [BENCHMARKS](docs/BENCHMARKS.
 packets: [M2](docs/reviews/M2.md), [M4](docs/reviews/M4.md), [M5](docs/reviews/M5.md),
 [R1 reliability](docs/reviews/R1.md), [R2 quality gates](docs/reviews/R2_QUALITY_GATES.md),
 [1.0 acceptance](docs/reviews/RELEASE_1.0_ACCEPTANCE.md). All
-reviews so far are self-review by the implementing agent; **no independent review has
-happened.**
+review packets and automated gates document the engineering checks; an independent external
+code review has not yet been performed.
 
 ## Limitations
 
