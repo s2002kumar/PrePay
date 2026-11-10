@@ -427,3 +427,24 @@ def test_stability_s1_resumes_and_feeds_the_robustness_diagnostic(
         if c["family"] == "F-M1" and c["candidate"] == "X1_factored_gbm"
     )
     assert x1["sampling_fragility"] == "not_assessable"
+
+
+def test_only_one_orchestrator_runs_on_a_directory(
+    built: tuple[Path, DataLock], tmp_path: Path
+) -> None:
+    """Gate B dry run: a stopped shell's children kept running on Windows, and two orchestrators
+    wrote the same directory. The run lock refuses the second and is released on every exit."""
+    root, lock = built
+    lock_path = _lock_file(lock, tmp_path / "lock.json")
+    out = tmp_path / "e01"
+    options = e01_run.Options(
+        root, lock_path, out, "pilot", min_free_commit_bytes=0, overrides=OVERRIDES
+    )
+    out.mkdir()
+    held = e01_run.acquire_run_lock(out, "folds")
+    with pytest.raises(E01Error, match="another E01 run holds"):
+        e01_run.run(options)
+    held.unlink()
+    (out / e01_run.STOP).write_text("")
+    assert e01_run.run(options) == e01_run.EXIT_STOPPED
+    assert not (out / e01_run.RUN_LOCK).exists()  # released after a stop, too

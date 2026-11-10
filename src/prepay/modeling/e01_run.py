@@ -21,6 +21,9 @@ The ledger (``ledger.json``) holds **metadata only**: job names, times, exit cod
 projections, digests-based identity booleans and differing file names. It holds no metric,
 count or result, so it can be shared with the agent (ADR 0014 §9.6).
 
+Only one orchestrator may run on a directory at a time: it holds ``.e01-run.lock`` for the whole
+stage, and a second run is refused.
+
 Real-data safeguards: the stage ``all`` is refused, so the owner reviews the pilot before the
 other folds; the preflight can't be lowered below 12 GiB or the budget raised above 10 GiB; the
 pilot needs ``--reproduce-against``; and outputs can't be written inside the repository except
@@ -67,6 +70,8 @@ PREFLIGHT_WAIT_SECONDS = 2 * 3600
 PREFLIGHT_POLL_SECONDS = 60
 LEDGER = "ledger.json"
 STOP = "STOP"
+#: Held for a whole ``e01 run``; a second orchestrator on the same directory is refused.
+RUN_LOCK = ".e01-run.lock"
 JOBS = "jobs"
 
 EXIT_OK = 0
@@ -145,6 +150,31 @@ def check_options(options: Options, lock: DataLock, overrides: Overrides) -> Non
     root = options.root.resolve()
     if root.is_relative_to(REPO_ROOT) and not root.is_relative_to(REPO_ROOT / "artifacts"):
         raise E01Error("real data: write E01 outputs outside the repository or under artifacts/")
+
+
+# --------------------------------------------------------------------------- run lock
+def acquire_run_lock(root: Path, stage: str) -> Path:
+    """Create the run lock exclusively, or refuse if another run holds it.
+
+    Gate B's dry run showed why: stopping a shell on Windows leaves its child processes running,
+    and two orchestrators then wrote jobs and the ledger in the same directory. A lock left by a
+    crash is never removed automatically; the owner checks that no E01 process is running, then
+    deletes it.
+    """
+    import json
+
+    path = root / RUN_LOCK
+    try:
+        handle = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        holder = path.read_text(encoding="utf-8", errors="replace").strip()
+        raise E01Error(
+            f"another E01 run holds {path} ({holder}). If no E01 process is running, delete the "
+            "file and run again."
+        ) from None
+    with os.fdopen(handle, "w", encoding="utf-8") as out:
+        out.write(json.dumps({"pid": os.getpid(), "stage": stage, "started_utc": _now()}))
+    return path
 
 
 # --------------------------------------------------------------------------- ledger
@@ -314,6 +344,22 @@ def run(
     check_options(options, lock, overrides)
     root = options.root
     root.mkdir(parents=True, exist_ok=True)
+    lock_file = acquire_run_lock(root, options.stage)
+    try:
+        return _run_stage(options, lock, overrides, spawn, free_commit, sleep)
+    finally:
+        lock_file.unlink(missing_ok=True)
+
+
+def _run_stage(
+    options: Options,
+    lock: DataLock,
+    overrides: Overrides,
+    spawn: Spawn,
+    free_commit: Callable[[], int | None],
+    sleep: Callable[[float], None],
+) -> int:
+    root = options.root
     (root / JOBS).mkdir(exist_ok=True)
     ledger = load_ledger(root, lock)
     if options.waiver:
