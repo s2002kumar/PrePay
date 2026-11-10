@@ -197,7 +197,7 @@ def test_rolling_origin_reads_development_months_only(
         "predict",
         "metrics",
     ]
-    peaks = [s["peak_rss_bytes"] for s in stages]
+    peaks = [s["process_peak_rss_bytes"] for s in stages]
     assert all(b >= a for a, b in itertools.pairwise(peaks))
 
 

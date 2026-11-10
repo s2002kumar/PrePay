@@ -11,7 +11,7 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from prepay import __version__, logs
 
@@ -367,6 +367,76 @@ def _cmd_diagnose_curtailments(args: argparse.Namespace) -> int:
     )
     write_json_atomic(Path(args.out), report)
     _emit({"out": args.out, "status": "written"})
+    return 0
+
+
+def _e01_overrides(args: argparse.Namespace) -> dict[str, Any]:
+    raw = getattr(args, "synthetic_overrides", None)
+    return dict(json.loads(raw)) if raw else {}
+
+
+def _cmd_e01_run(args: argparse.Namespace) -> int:
+    from prepay.modeling.e01_run import GIB, Options, run
+
+    options = Options(
+        data_root=Path(args.data_root),
+        lock_path=Path(args.lock),
+        root=Path(args.out),
+        stage=args.stage,
+        min_free_commit_bytes=int(args.min_free_commit_gib * GIB),
+        budget_bytes=int(args.budget_commit_gib * GIB),
+        preflight_wait_seconds=args.preflight_wait_minutes * 60.0,
+        reproduce_against=Path(args.reproduce_against) if args.reproduce_against else None,
+        waiver=args.waive_reproduction_mismatch,
+        accept_projection=args.accept_projection,
+        overrides=_e01_overrides(args),
+        log_level=args.log_level,
+    )
+    code = run(options)
+    _emit({"e01": Path(args.out).as_posix(), "stage": args.stage, "exit": code})
+    return code
+
+
+def _cmd_e01_fold(args: argparse.Namespace) -> int:
+    from prepay.ingest.lock import read_lock
+    from prepay.modeling.e01 import Overrides, run_fold
+
+    run_dir, status = run_fold(
+        Path(args.data_root),
+        read_lock(Path(args.lock)),
+        Path(args.out),
+        args.origin,
+        Overrides.from_json(_e01_overrides(args)),
+    )
+    _emit({"e01_fold": run_dir.name, "status": status})
+    return 0
+
+
+def _cmd_e01_stability(args: argparse.Namespace) -> int:
+    from prepay.ingest.lock import read_lock
+    from prepay.modeling.e01 import Overrides, run_stability
+
+    target = run_stability(
+        Path(args.data_root),
+        read_lock(Path(args.lock)),
+        Path(args.out),
+        args.kind,
+        Overrides.from_json(_e01_overrides(args)),
+    )
+    _emit({"e01_stability": target.name, "status": "written"})
+    return 0
+
+
+def _cmd_e01_summarize(args: argparse.Namespace) -> int:
+    from prepay.io import read_json
+    from prepay.modeling.e01 import ORIGINS, write_summary
+    from prepay.modeling.e01_run import LEDGER
+
+    root = Path(args.out)
+    origins = tuple(args.origins.split(",")) if args.origins else ORIGINS
+    ledger = read_json(root / LEDGER) if (root / LEDGER).is_file() else None
+    target = write_summary(root, origins=origins, ledger=ledger)
+    _emit({"e01_summary": target.name, "status": "written"})
     return 0
 
 
@@ -812,6 +882,60 @@ def build_parser() -> argparse.ArgumentParser:
     exp_roll.add_argument("--origins", help="comma-separated YYYY-MM origins (default: ADR 0009)")
     exp_roll.add_argument("--models", help="comma-separated subset of the development families")
     exp_roll.set_defaults(handler=_cmd_experiment_rolling)
+    e01 = experiment_sub.add_parser(
+        "e01",
+        help="ADR 0014 experiment E01 (development folds and stability; owner-run on real data)",
+    )
+    e01_sub = e01.add_subparsers(dest="e01_command", required=True)
+    e01_run = e01_sub.add_parser(
+        "run",
+        help="run an E01 stage: one child process per job, preflight, budget and ledger",
+        description=(
+            "Runs the stage's jobs in order, each in a fresh process, and writes a metadata-only "
+            "ledger. Stops on the STOP file, a failed preflight, a failure, a peak above the "
+            "budget, a projection above it, or a pilot whose model files differ from the V1 "
+            "run. Exit codes: 0 done, 1 job failed, 3 preflight, 4 budget, 5 reproduction, "
+            "6 STOP file, 7 projection. Real data: run 'pilot' first, then 'folds' and "
+            "'stability'; 'all' is for synthetic data only."
+        ),
+    )
+    e01_run.add_argument("--stage", required=True, choices=["pilot", "folds", "stability", "all"])
+    e01_run.add_argument("--min-free-commit-gib", type=float, default=12.0)
+    e01_run.add_argument("--budget-commit-gib", type=float, default=10.0)
+    e01_run.add_argument("--preflight-wait-minutes", type=float, default=120.0)
+    e01_run.add_argument("--reproduce-against", help="the V1 run of the pilot's origin")
+    e01_run.add_argument(
+        "--waive-reproduction-mismatch",
+        metavar="REASON",
+        help="the owner's written reason to continue after a pilot identity mismatch",
+    )
+    e01_run.add_argument(
+        "--accept-projection",
+        action="store_true",
+        help="run a fold whose conservative projection exceeds the budget",
+    )
+    e01_fold = e01_sub.add_parser("fold", help="one E01 fold (child job of 'e01 run')")
+    e01_fold.add_argument("--origin", required=True, help="YYYY-MM, one of ADR 0014 §4")
+    e01_stab = e01_sub.add_parser("stability", help="one S1 stability kind (child job)")
+    e01_stab.add_argument("--kind", required=True, choices=["samples", "seeds"])
+    for command in (e01_run, e01_fold, e01_stab):
+        command.add_argument("--data-root", required=True)
+        command.add_argument("--lock", required=True)
+        command.add_argument("--out", required=True, help="the E01 directory")
+        command.add_argument(
+            "--synthetic-overrides",
+            help="JSON test settings; refused for a real-data lock",
+        )
+    e01_run.set_defaults(handler=_cmd_e01_run)
+    e01_fold.set_defaults(handler=_cmd_e01_fold)
+    e01_stab.set_defaults(handler=_cmd_e01_stability)
+    e01_sum = e01_sub.add_parser(
+        "summarize",
+        help="rebuild e01-summary.json and the owner's local report e01-report.md",
+    )
+    e01_sum.add_argument("--out", required=True, help="the E01 directory")
+    e01_sum.add_argument("--origins", help="comma-separated declared origins (default: all six)")
+    e01_sum.set_defaults(handler=_cmd_e01_summarize)
 
     forward = sub.add_parser(
         "forward",
@@ -976,10 +1100,12 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _write_resource_report(started: float, exit_code: int) -> None:
+def _write_resource_report(started: float, exit_code: int, start_commit: int | None) -> None:
     """Record this command's duration and peak memory when a benchmark or runner asks for it.
 
     Written for failed commands too, so a job that runs out of memory still leaves its peak.
+    ``start_commit_bytes`` is the process commit charge when the command started (before its
+    heavy imports), the baseline that E01's conservative projection scales from.
     """
     target = os.environ.get("PREPAY_RESOURCE_REPORT")
     if not target:
@@ -993,6 +1119,7 @@ def _write_resource_report(started: float, exit_code: int) -> None:
             "seconds": round(time.perf_counter() - started, 3),
             "peak_rss_bytes": peak_rss_bytes(),
             "peak_commit_bytes": peak_commit_bytes(),
+            "start_commit_bytes": start_commit,
             "exit_code": exit_code,
         },
     )
@@ -1004,6 +1131,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     logs.configure(args.log_level)
     handler: Callable[[argparse.Namespace], int] = args.handler
     started = time.perf_counter()
+    from prepay.resources import commit_now_bytes
+
+    start_commit = commit_now_bytes()
     code = 1
     try:
         code = handler(args)
@@ -1011,7 +1141,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         log.exception("command failed", extra={"command": args.command})
         code = 1
     finally:
-        _write_resource_report(started, code)
+        _write_resource_report(started, code, start_commit)
     return code
 
 

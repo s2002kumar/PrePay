@@ -11,7 +11,7 @@ These read training or validation rows only, never a sealed test window.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -257,11 +257,16 @@ def stability(
     base: ExperimentConfig,
     replicates: int = 5,
     reference_fraction: float = 0.02,
+    experiment_prefix: str = "",
+    runner: Callable[[Path, DataLock, Path, ExperimentConfig], Path] | None = None,
 ) -> Path:
     """D6 (``kind="samples"``: disjoint loan samples) or D7 (``"seeds"``: LightGBM seeds).
 
     Each replicate refits ``base``'s families on its windows. Tune-window log loss and the
     incentive response on one fixed reference sample are compared across replicates.
+    ``runner`` fits one replicate (default :func:`~prepay.modeling.experiment.run_experiment`);
+    E01 passes a provenance-checked reuse so an interrupted job resumes. ``experiment_prefix``
+    namespaces the replicate IDs (``E01-D6-0``).
     """
     import dataclasses
     import datetime as dt
@@ -299,11 +304,11 @@ def stability(
     for k in range(replicates):
         config = dataclasses.replace(
             base,
-            experiment_id=f"{'D6' if kind == 'samples' else 'D7'}-{k}",
+            experiment_id=f"{experiment_prefix}{'D6' if kind == 'samples' else 'D7'}-{k}",
             sample_index=k if kind == "samples" else base.sample_index,
             seed=None if kind == "samples" else 20261028 + k,
         )
-        run_dir = run_experiment(data_root, lock, out_root, config)
+        run_dir = (runner or run_experiment)(data_root, lock, out_root, config)
         runs.append(run_dir.name)
         validation = read_json(run_dir / "validation.json")
         run = load_run(run_dir)
