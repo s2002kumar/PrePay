@@ -293,6 +293,11 @@ uv run --frozen prepay experiment e01 run --stage stability --data-root <data-ro
   the budget; 5 the pilot's model files differ from the V1 run; 6 the `STOP` file exists; 7 a
   fold's conservative projection exceeds the budget; 8 a fold failed an implementation check.
   Nothing changes automatically after a stop.
+- **Keep the host awake for a stage.** Standby pauses jobs without harming them, but wall
+  times and the preflight wait then include it. Set sleep to "never" while plugged in, or run
+  the stage while you are using the machine.
+- **The orchestrator itself holds about 1.4 GiB of commit** (library imports) for the whole
+  stage. The preflight already counts it.
 - **After every fold,** `prepay experiment verify --unsealed` runs in its own process: coherent
   probabilities, bit-identical reload, rate-level invariance, monotone hazards, derived-feature
   parity. Only the names of failed checks reach the ledger.

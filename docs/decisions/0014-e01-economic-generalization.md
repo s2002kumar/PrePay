@@ -378,3 +378,33 @@ The output recorded on 2026-11-07 is `docs/reviews/gate-a/fold-regimes.json`.
 5. **Development labels everywhere.** Every E01 result is labeled development evidence, and the
    regime classes are analogues, not confirmation of 2020–2026.
 6. **The forward study is unchanged:** ADR 0010, the registration and `evaluation/forward.py`.
+
+## 14. Clarifications from Gate B (2026-11-10): execution only
+
+Gate B built and exercised §9 on synthetic data. These points make the execution conditions
+precise. None changes a family, measure, interval, class, margin or reading rule.
+
+1. **"Pilot baseline" (§9.3)** is the job's commit charge after it has imported its libraries
+   and before it reads any data. It is recorded as `baseline_commit_bytes`.
+   - Measuring from the command's start scaled about 1.4 GiB of imports as if it grew with the
+     data.
+   - In the dry run that stopped a fold projected at 10.2 GiB, when no fold had peaked above
+     1.9 GiB.
+2. **Implementation checks run after every fold, not only the pilot.** This is stricter than
+   §9.3.
+   - The command is `prepay experiment verify --unsealed`. E01 folds are never sealed, so only
+     the seal check is omitted.
+   - A failed check stops the queue (exit 8). Only the names of failed checks reach the
+     ledger.
+3. **One orchestrator per E01 directory.** `e01 run` holds `.e01-run.lock` for the whole stage.
+   - On Windows, stopping a shell leaves its child processes running. In the dry run, two
+     orchestrators wrote the same directory.
+   - A lock left by a crash is never removed automatically.
+4. **STOP.** The `STOP` file also ends a preflight wait, at the next poll.
+5. **Standby.** The host must not sleep during a stage. Standby pauses jobs without harming
+   them, but wall times then include it: one dry-run fold showed 12.7 h for about 13 min of
+   work.
+6. **R7 and the factored families.** X1–X3 can show `incentive_ice_violations` on the final
+   payoff probability `(1 − c) h`. This is the known property of ADR 0010 amendment 2. R7
+   lists it under "D2 flags to explain" and leaves the explanation to the owner. It is not
+   treated as explained automatically.
