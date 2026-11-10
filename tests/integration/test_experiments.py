@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import itertools
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -185,6 +186,19 @@ def test_rolling_origin_reads_development_months_only(
     assert "estimate" in paired["loan_cluster"]
     regime = report["regime_calibration"]["B2_logistic"]["dimensions"]
     assert set(regime) == {"rate_level_band", "rate_change_6m", "new_low"}
+    # G15: the backtests run before the evaluation window and the predictions are loaded, so
+    # the two phases' memory doesn't add up. Process peaks never decrease between stages.
+    stages = report["stages"]
+    assert [s["stage"] for s in stages] == [
+        "load",
+        "cohort_backtest",
+        "runoff_backtest",
+        "read_window",
+        "predict",
+        "metrics",
+    ]
+    peaks = [s["peak_rss_bytes"] for s in stages]
+    assert all(b >= a for a, b in itertools.pairwise(peaks))
 
 
 def test_disjoint_samples_share_no_loan(built: tuple[Path, DataLock]) -> None:

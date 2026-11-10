@@ -27,6 +27,21 @@ def peak_rss_bytes() -> int:
         return int(peak if sys.platform == "darwin" else peak * 1024)
 
 
+def peak_commit_bytes() -> int | None:
+    """Peak private committed memory of the current process, in bytes; ``None`` off Windows.
+
+    Windows refuses an allocation (``MemoryError``) when the system **commit** limit is reached,
+    not when physical memory runs out. On a host under memory pressure the working set is
+    trimmed, so peak RSS can understate what a job needed. ``PeakPagefileUsage`` is the peak of
+    the process's private commit charge, the quantity that hits that limit. Linux overcommits and
+    has no per-process equivalent, so peak RSS (``VmHWM``) is the measure there.
+    """
+    if sys.platform == "win32":
+        return _windows_peak_commit()
+    else:  # noqa: RET505 - a platform branch mypy can type-check per OS
+        return None
+
+
 def _proc_vm_hwm() -> int | None:
     try:
         with open("/proc/self/status", encoding="ascii") as status:
@@ -57,6 +72,12 @@ if sys.platform == "win32":
         )
 
     def _windows_peak_working_set() -> int:
+        return int(_windows_counters().PeakWorkingSetSize)
+
+    def _windows_peak_commit() -> int:
+        return int(_windows_counters().PeakPagefileUsage)
+
+    def _windows_counters() -> _ProcessMemoryCounters:
         counters = _ProcessMemoryCounters()
         counters.cb = ctypes.sizeof(_ProcessMemoryCounters)
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -71,7 +92,7 @@ if sys.platform == "win32":
             kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb
         ):
             raise OSError(ctypes.get_last_error(), "GetProcessMemoryInfo failed")
-        return int(counters.PeakWorkingSetSize)
+        return counters
 
 
 def host_description() -> dict[str, object]:

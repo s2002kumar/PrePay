@@ -573,6 +573,11 @@ class ConstrainedHazard(HazardModel):
         del payoff_x
         return cls(pre, design, payoff_b, payoff_w.tolist(), credit_b, credit_w.tolist(), float(l2))
 
+    def _block_rows(self) -> int:
+        # Scored in blocks of one design chunk, so a block never holds more than one chunk of the
+        # payoff and credit designs (the transient that ran out of memory in G15 was B2's).
+        return DESIGN_CHUNK_ROWS
+
     def hazards(self, batch: PanelBatch) -> tuple[FloatArray, FloatArray]:
         payoff_x, _ = self.design.payoff_matrix(self.preprocessor, batch)
         credit_x = self.design.credit_matrix(self.preprocessor, batch)
