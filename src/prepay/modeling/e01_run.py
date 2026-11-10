@@ -326,14 +326,18 @@ def _child_args(job: Job, options: Options) -> list[str]:
 
 def _preflight(
     options: Options, free_commit: Callable[[], int | None], sleep: Callable[[float], None]
-) -> tuple[bool, int | None]:
+) -> tuple[str, int | None]:
+    """Wait for the free commit the job needs: ``ok``, ``failed`` after the wait limit, or
+    ``stopped`` as soon as the STOP file appears (the wait can last hours)."""
     waited = 0.0
     while True:
+        if (options.root / STOP).exists():
+            return "stopped", None
         free = free_commit()
         if free is None or free >= options.min_free_commit_bytes:
-            return True, free
+            return "ok", free
         if waited >= options.preflight_wait_seconds:
-            return False, free
+            return "failed", free
         sleep(options.preflight_poll_seconds)
         waited += options.preflight_poll_seconds
 
@@ -429,9 +433,12 @@ def _run_job(
     if (options.root / STOP).exists():
         record["outcome"] = "stopped_by_file"
         return EXIT_STOPPED
-    ok, free = _preflight(options, free_commit, sleep)
+    state, free = _preflight(options, free_commit, sleep)
     record["free_commit_before_bytes"] = free
-    if not ok:
+    if state == "stopped":
+        record["outcome"] = "stopped_by_file"
+        return EXIT_STOPPED
+    if state == "failed":
         record["outcome"] = "preflight_failed"
         return EXIT_PREFLIGHT
     if job.kind == "fold" and job.arg != pilot_origin:

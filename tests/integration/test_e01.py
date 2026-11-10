@@ -332,6 +332,18 @@ def test_orchestrator_stops_on_stop_file_preflight_budget_and_mismatch(
     assert code == e01_run.EXIT_PREFLIGHT
     assert read_json(tmp_path / "pre" / e01_run.LEDGER)["jobs"][-1]["outcome"] == "preflight_failed"
 
+    # The STOP file ends a preflight wait at its next poll, not after the whole wait.
+    waiting = options(tmp_path / "wait", min_free_commit_bytes=10, preflight_wait_seconds=7200)
+
+    def stop_while_waiting(seconds: float) -> None:
+        (tmp_path / "wait" / e01_run.STOP).write_text("")
+
+    code = e01_run.run(
+        waiting, spawn=fake_spawn(1), free_commit=lambda: 1, sleep=stop_while_waiting
+    )
+    assert code == e01_run.EXIT_STOPPED
+    assert read_json(tmp_path / "wait" / e01_run.LEDGER)["jobs"][-1]["outcome"] == "stopped_by_file"
+
     heavy = options(tmp_path / "budget", budget_bytes=100)
     assert e01_run.run(heavy, spawn=fake_spawn(101)) == e01_run.EXIT_BUDGET
 
