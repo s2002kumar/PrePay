@@ -1,0 +1,79 @@
+{
+ "kind": "prepay-gate-a-measurements",
+ "data": "synthetic only: prepay synth --preset dev (47,000 fictional loans), fold V1 2009-12 at fraction 0.1",
+ "host": "Windows 11, Intel Core Ultra 7 155H, 15.4 GB RAM, commit limit 63.4 GiB, shared with unrelated work",
+ "date": "2026-11-07",
+ "fold_evaluation_old_vs_new": {
+  "old_commit": "cefbc70 (main)",
+  "new": "fix/g15-bounded-scoring-memory working tree",
+  "rounds": [
+   {
+    "old": {
+     "peak_ws_bytes": 1026658304,
+     "peak_commit_bytes": 2351661056,
+     "baseline_commit_bytes": 1490911232,
+     "seconds": 77.5
+    },
+    "new": {
+     "peak_ws_bytes": 522637312,
+     "peak_commit_bytes": 1964933120,
+     "baseline_commit_bytes": 1488543744,
+     "seconds": 77.3
+    }
+   },
+   {
+    "old": {
+     "peak_ws_bytes": 1019977728,
+     "peak_commit_bytes": 2354139136,
+     "baseline_commit_bytes": 1488756736,
+     "seconds": 97.7
+    },
+    "new": {
+     "peak_ws_bytes": 468738048,
+     "peak_commit_bytes": 1961312256,
+     "baseline_commit_bytes": 1488838656,
+     "seconds": 86.3
+    }
+   }
+  ],
+  "report_comparison": {
+   "values_compared": 2586,
+   "differing_values": 0,
+   "repeat_runs_identical": true
+  }
+ },
+ "cohort_chunk_scoring_480000_rows": {
+  "B2_logistic": {
+   "old_peak_mib": 673.8,
+   "new_peak_mib": 101.0,
+   "old_seconds": 3.84,
+   "new_seconds": 3.48,
+   "max_abs_difference": 0.0,
+   "bit_identical": true
+  },
+  "H1_constrained_hazard": {
+   "old_peak_mib": 586.4,
+   "new_peak_mib": 136.0,
+   "old_seconds": 5.66,
+   "new_seconds": 4.74,
+   "max_abs_difference": 6.661338147750939e-16,
+   "bit_identical": false
+  },
+  "method": "tracemalloc peak of one scoring call; old = _predict_block on the whole chunk, new = predict_proba"
+ },
+ "window_phase_commit_mib": {
+  "note": "commit above the process baseline after reading the evaluation window, predicting 7 models, and computing metrics and paired intervals; dominated by fixed costs at these sizes, so no reliable per-row slope",
+  "6_months_52688_rows": {
+   "held": 119,
+   "peak": 219
+  },
+  "12_months_103729_rows": {
+   "held": 158,
+   "peak": 274
+  },
+  "24_months_205425_rows": {
+   "held": 172,
+   "peak": 300
+  }
+ }
+}

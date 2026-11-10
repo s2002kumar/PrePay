@@ -93,9 +93,12 @@ Documentation, part of the brief:
   - The forward comparison was registered on 2026-11-02, with only release 48 on disk, so
     registration preceded any forward data.
   - The opening's rehearsal completed, with a 2.0 GB peak.
-  - Rolling-origin and stability runs are in progress, at low priority.
+  - Rolling-origin and stability runs were in progress, at low priority. *Correction
+    (2026-11-07): that queue stopped on 2026-11-03 when a fold evaluation ran out of memory;
+    see the R2 report, G15 and G16.*
 - **Research freeze:** no new model families, external economic data, experiments or
-  infrastructure after R2 without a separate owner decision (ADR 0011).
+  infrastructure after R2 without a separate owner decision (ADR 0011). *The owner made that
+  decision on 2026-11-07 (ADR 0011 amendment 1).*
 
 ## Reproduce
 
