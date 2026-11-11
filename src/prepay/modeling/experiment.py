@@ -31,6 +31,7 @@ import duckdb
 import numpy as np
 
 from prepay import periods
+from prepay.arrays import FloatArray
 from prepay.evaluation.attribution import cohort_attribution, runoff_attribution
 from prepay.evaluation.cohort import backtest as cohort_backtest
 from prepay.evaluation.inference import summarize, two_way
@@ -39,6 +40,7 @@ from prepay.evaluation.runoff import runoff_backtest
 from prepay.evaluation.segments import segment_report
 from prepay.features.batch import PanelBatch
 from prepay.features.derived import DERIVED_VERSION, augment
+from prepay.features.machine import RatePath
 from prepay.features.panel import LOAN_HASH_BUCKETS, rate_path_from_bronze
 from prepay.features.panel import rate_path_from_warehouse as warehouse_rates
 from prepay.ingest.lock import DataLock
@@ -69,6 +71,8 @@ from prepay.provenance import (
     git_sha,
     software_lock_digest,
 )
+from prepay.reliability.support import SupportProfile
+from prepay.resources import StageRecorder
 from prepay.transform import warehouse_path
 
 log = logging.getLogger(__name__)
@@ -96,6 +100,17 @@ V1_ORIGINS = tuple(periods.month(year, 12) for year in (2007, 2009, 2011, 2013, 
 REFERENCES = ("B2_logistic", "M1_lightgbm")
 MONOTONE_REFERENCE_ROWS = 2000
 DEVELOPMENT_REPORT = Path("evaluations") / "development.json"
+SUPPORT_PROFILE = "support.json"
+#: Manifest fields that must match for an existing run to be reused (ADR 0014 §9.1).
+PROVENANCE_FIELDS = (
+    "experiment_id",
+    "config_digest",
+    "data_lock_fingerprint",
+    "git_sha",
+    "software_lock_digest",
+    "feature_contract_digest",
+    "derived_feature_version",
+)
 
 
 class OpenedWindowError(PermissionError):
@@ -340,8 +355,16 @@ def run_experiment(
     config: ExperimentConfig,
     *,
     allow_opened: bool = False,
+    evaluate: bool = True,
+    save_support: bool = False,
 ) -> Path:
-    """Fit, calibrate and record one experiment run; development folds are also evaluated."""
+    """Fit, calibrate and record one experiment run; development folds are also evaluated.
+
+    ``evaluate=False`` leaves a development fold unevaluated (E01 evaluates it in its own job).
+    ``save_support=True`` also writes the training rows' applicability profile (``support.json``,
+    ADR 0009 §7), fitted while the training rows are in memory, so a later evaluation can map
+    support (D3) without reading the training window again. Neither changes a model file.
+    """
     import lightgbm
 
     started = time.perf_counter()
@@ -367,6 +390,9 @@ def run_experiment(
 
     pre = Preprocessor.fit(train)
     support = feature_support(train)
+    support_profile = (
+        SupportProfile.fit(train.features, train.outcome_class).to_json() if save_support else None
+    )
     models: dict[str, HazardModel] = {}
     tuning: dict[str, list[dict[str, Any]]] = {}
     for name in config.models:
@@ -398,6 +424,8 @@ def run_experiment(
         raise FileExistsError(f"{run_dir} exists; experiment runs are written once")
     save_models(run_dir, pre, models)
     write_json_atomic(run_dir / "validation.json", validation)
+    if support_profile is not None:
+        write_json_atomic(run_dir / SUPPORT_PROFILE, support_profile)
     designated = calibration[config.designated]
     kept = (
         None
@@ -445,13 +473,85 @@ def run_experiment(
         "seconds": round(time.perf_counter() - started, 1),
     }
     write_json_atomic(run_dir / MANIFEST, manifest)
-    if config.windows.evaluate is not None:
+    if evaluate and config.windows.evaluate is not None:
         report = evaluate_development(run_dir, data_root, lock, allow_opened=allow_opened)
         target = run_dir / DEVELOPMENT_REPORT
         write_json_atomic(target, report)
         read_only(target)
     log.info("experiment run written", extra={"run_id": run_id, "evidence_class": evidence})
     return run_dir
+
+
+class ProvenanceError(RuntimeError):
+    """An existing run can't be reused: its provenance differs, or it is incomplete or ambiguous."""
+
+
+def current_provenance(lock: DataLock, config: ExperimentConfig) -> dict[str, Any]:
+    """The values of :data:`PROVENANCE_FIELDS` that a run of ``config`` would record now."""
+    return {
+        "experiment_id": config.experiment_id,
+        "config_digest": canonical_digest(asdict(config)),
+        "data_lock_fingerprint": lock.fingerprint(),
+        "git_sha": git_sha(),
+        "software_lock_digest": software_lock_digest(),
+        "feature_contract_digest": feature_contract_digest(),
+        "derived_feature_version": DERIVED_VERSION,
+    }
+
+
+def find_run(out_root: Path, lock: DataLock, config: ExperimentConfig) -> Path | None:
+    """The one existing run of ``config.experiment_id`` under ``out_root``, if its provenance
+    matches the current code, lock and configuration exactly; ``None`` if there is none.
+
+    Raises :class:`ProvenanceError` for a run with that ID whose provenance differs, a directory
+    without a manifest (an interrupted write), or more than one candidate. Nothing is reconciled
+    or deleted: the owner decides (ADR 0014 §9.1).
+    """
+    if not out_root.is_dir():
+        return None
+    suffix = f"-{config.experiment_id}-"
+    candidates = sorted(p for p in out_root.iterdir() if p.is_dir() and suffix in p.name)
+    if not candidates:
+        return None
+    if len(candidates) > 1:
+        names = ", ".join(p.name for p in candidates)
+        raise ProvenanceError(f"more than one run of {config.experiment_id}: {names}")
+    run_dir = candidates[0]
+    if not (run_dir / MANIFEST).is_file():
+        raise ProvenanceError(f"{run_dir.name} has no manifest (interrupted); move it aside")
+    manifest = read_json(run_dir / MANIFEST)
+    expected = current_provenance(lock, config)
+    differing = sorted(k for k in PROVENANCE_FIELDS if manifest.get(k) != expected[k])
+    if differing:
+        raise ProvenanceError(
+            f"{run_dir.name} was made under different {', '.join(differing)}; it is not reused"
+        )
+    return run_dir
+
+
+def find_or_run(
+    data_root: Path,
+    lock: DataLock,
+    out_root: Path,
+    config: ExperimentConfig,
+    *,
+    evaluate: bool = True,
+    save_support: bool = False,
+) -> tuple[Path, bool]:
+    """Reuse the matching run of ``config`` (see :func:`find_run`) or train it.
+
+    Returns ``(run_dir, reused)``. A real-data run needs a clean worktree with a known commit,
+    so that the provenance it records describes the code that produced it.
+    """
+    if not lock.synthetic and (git_sha() is None or git_dirty() is not False):
+        raise ProvenanceError("real-data runs need a clean Git worktree with a known commit")
+    existing = find_run(out_root, lock, config)
+    if existing is not None:
+        return existing, True
+    run_dir = run_experiment(
+        data_root, lock, out_root, config, evaluate=evaluate, save_support=save_support
+    )
+    return run_dir, False
 
 
 def paired_development(
@@ -481,6 +581,19 @@ def _overall_ae(result: dict[str, Any]) -> float | None:
     return result["events"]["prepay"] / expected if expected > 0 else None
 
 
+@dataclass
+class FoldEvaluation:
+    """A fold's development report plus what E01 needs to extend it in the same process."""
+
+    report: dict[str, Any]
+    batch: PanelBatch
+    predictions: dict[str, FloatArray]
+    models: dict[str, HazardModel]
+    rates: RatePath
+    cohort: dict[str, Any]
+    runoff: dict[str, Any]
+
+
 def evaluate_development(
     run_dir: Path, data_root: Path, lock: DataLock, *, allow_opened: bool = False
 ) -> dict[str, Any]:
@@ -492,27 +605,25 @@ def evaluate_development(
     The backtests run first. They need only loan statics and the cohort, so the evaluation
     window and every model's predictions are not held while they run; the peak is the larger of
     the two phases rather than their sum (R2 gate G15). The computations are independent, so the
-    order changes no reported number. ``stages`` lists each phase in order, with its time and the
-    process peaks after it (a list, because the report's JSON keys are sorted).
+    order changes no reported number. ``stages`` lists each phase in order with its time; its
+    memory fields are the process's high-water marks so far, not per-stage peaks (ADR 0014 §9.2).
     """
-    from prepay.resources import peak_commit_bytes, peak_rss_bytes
+    stage = StageRecorder()
+    evaluation = evaluate_fold(run_dir, data_root, lock, stage, allow_opened=allow_opened)
+    evaluation.report["stages"] = stage.stages
+    return evaluation.report
 
-    stages: list[dict[str, str | float | int | None]] = []
-    clock = time.perf_counter()
 
-    def stage(name: str) -> None:
-        nonlocal clock
-        now = time.perf_counter()
-        stages.append(
-            {
-                "stage": name,
-                "seconds": round(now - clock, 1),
-                "peak_rss_bytes": peak_rss_bytes(),
-                "peak_commit_bytes": peak_commit_bytes(),
-            }
-        )
-        clock = now
-
+def evaluate_fold(
+    run_dir: Path,
+    data_root: Path,
+    lock: DataLock,
+    stage: StageRecorder,
+    *,
+    allow_opened: bool = False,
+) -> FoldEvaluation:
+    """The body of :func:`evaluate_development`, keeping the window and predictions for callers
+    (E01) that add analyses in the same pass."""
     run = load_run(run_dir)
     manifest = run.manifest
     window_json = manifest["windows"].get("evaluate")
@@ -557,7 +668,7 @@ def evaluate_development(
         for name, p in predictions.items()
     }
     stage("metrics")
-    return {
+    report = {
         "kind": "prepay-development-evaluation",
         "evidence_class": evidence,
         "run_id": manifest["run_id"],
@@ -573,8 +684,8 @@ def evaluate_development(
         "cohort_attribution": cohort_attribution(cohort),
         "runoff_backtest": runoff,
         "runoff_attribution": runoff_attribution(runoff),
-        "stages": stages,
     }
+    return FoldEvaluation(report, batch, predictions, calibrated, rates, cohort, runoff)
 
 
 # --------------------------------------------------------------------------- rolling origin

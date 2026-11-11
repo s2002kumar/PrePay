@@ -4,7 +4,7 @@ Public, non-sensitive summary. Status levels: `NOT BUILT` · `IMPLEMENTED-SYNTHE
 tested on synthetic data only) · `VALIDATED-REAL-PRIVATE` (run privately on lawfully obtained
 Freddie Mac files) · `PUBLIC-DEPLOYED` · `BLOCKED`. A green CI run is never a real-data claim.
 
-Last updated: 2026-11-07.
+Last updated: 2026-11-10.
 
 `VALIDATED-REAL-PRIVATE` means the stage was run and checked on the real files privately. It
 records that the check ran, not that every result was favourable. Real-data outcomes, including
@@ -47,8 +47,8 @@ served or published (decision D3).
 | Gate | Scope | Status | Evidence |
 |---|---|---|---|
 | A | Audit the failed development queue (G15); bounded-memory fix; correct G15/G16; E01 specification; draft inquiry to Freddie Mac | **done** 2026-11-07, approved by the owner 2026-11-09. Fix merged ([#43](https://github.com/s2002kumar/PrePay/pull/43)). Synthetic evidence only; no private job was launched | `docs/reviews/PREPAY_2_GATE_A.md`, [#43](https://github.com/s2002kumar/PrePay/pull/43), ADR 0014 (accepted with revisions 2026-11-09) |
-| B | E01 code (resume, B0 in folds, dependence-aware calibration intervals, per-fold probes, aggregator) and a synthetic dry run | approved 2026-11-09 (E01-D6), in progress. Synthetic engineering only; no private job | ADR 0014 §9.2 |
-| C | Owner-run pilot fold with reproduction and memory gates | not started | — |
+| B | E01 code (resume, B0 in folds, dependence-aware calibration intervals, per-fold probes, aggregator) and a synthetic dry run | **accepted in principle** by the owner 2026-11-10, with three fail-closed corrections (verification gating, one execution identity per E01 directory, fail-closed resources; ADR 0014 §15). Synthetic only; no private job was launched | `docs/reviews/PREPAY_2_GATE_B.md`, [#45](https://github.com/s2002kumar/PrePay/pull/45) |
+| C | Owner-run pilot fold with reproduction and memory gates | **conditionally approved** 2026-11-10: a single pilot, fold 2007-12, after the corrections merge and once the host has at least 12 GiB of free commit (this laptop had 1–10 GiB). The other folds and S1 wait for Gate D | ADR 0014 §15, runbook §10 |
 | D | E01 folds and stability (G15, G16) | not started | — |
 | — | Historical research page (decision D2) | deferred until E01's findings; data contract to follow E01's report schema | ADR 0013 |
 

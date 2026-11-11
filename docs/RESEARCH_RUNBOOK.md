@@ -263,3 +263,88 @@ uv run prepay forward rehearse --registry artifacts/forward/adr0010 --data-root 
 
 The development jobs run in a detached, below-normal-priority process. To stop it before its next
 job, create the empty file `logs/r2/STOP`.
+
+## 10. Experiment E01 (ADR 0014): owner-run, staged
+
+E01 is development evidence only. It reads outcome months up to 2019-12 and never touches the
+forward study. **Gate C (the pilot) needs the owner's approval before it runs.** Use one clean
+checkout of the reviewed commit for every stage; the commands refuse a dirty tree on real data.
+
+Before each stage, close heavy applications. Every job, and every verification after a fold,
+waits for 12 GiB of free commit (up to two hours) and must stay under a 10 GiB peak commit. Real
+data can't lower the first or raise the second.
+
+- **No reading, no run.** On real data, a host that gives no free-commit reading fails the
+  preflight (exit 3, `preflight_unavailable`).
+- **The budget is checked when each job exits.** No hard process limit is set, so a job can
+  reach a peak above 10 GiB before E01 stops the queue (exit 4). The preflight and the fold
+  projection are what keep a job from starting into one. A job whose peak wasn't measured
+  stops the queue too (`budget_unverified`).
+
+**One E01 directory = one execution identity.** That is the commit, `uv.lock`, the data lock,
+the feature definitions and the whole E01 configuration, recorded in the ledger at the pilot.
+- The folds and S1 run only under that identity. The folds need its pilot; S1 needs its folds.
+- A changed identity refuses the stage before any job runs.
+- If the identity changes while a stage runs, it stops after the current job (exit 9).
+- After a code or lock change, start a new `<out>` directory and run the pilot again.
+
+```bash
+# Gate C: the pilot (fold 2007-12), checked byte for byte against the V1 run of the same fold
+uv run --frozen prepay experiment e01 run --stage pilot --data-root <data-root> \
+  --lock configs/data.lock.json --out <private>/artifacts/experiments/e01 \
+  --reproduce-against <private>/artifacts/experiments/development/<V1-2007-12 run>
+# After the owner reviews the pilot (Gate D):
+uv run --frozen prepay experiment e01 run --stage folds --data-root <data-root> \
+  --lock configs/data.lock.json --out <private>/artifacts/experiments/e01
+uv run --frozen prepay experiment e01 run --stage stability --data-root <data-root> \
+  --lock configs/data.lock.json --out <private>/artifacts/experiments/e01
+```
+
+- **Each job runs in its own process.** Each fold, and each stability kind, is a fresh `prepay`
+  process, so its peak memory is its own. Re-running a stage resumes: finished folds and
+  replicates are reused only if their provenance matches exactly. A mismatch is refused.
+- **Exit codes:**
+  - 0 done;
+  - 1 a job failed;
+  - 3 preflight (not enough free commit, or no reading on real data);
+  - 4 a job or verification above the budget, or unmeasured;
+  - 5 the pilot's model files differ from the V1 run;
+  - 6 the `STOP` file exists;
+  - 7 a fold's conservative projection exceeds the budget;
+  - 8 a fold failed verification;
+  - 9 the execution identity changed during the stage.
+
+  Nothing changes automatically after a stop.
+- **Keep the host awake for a stage.** Standby pauses jobs without harming them, but wall
+  times and the preflight wait then include it. Set sleep to "never" while plugged in, or run
+  the stage while you are using the machine.
+- **The orchestrator itself holds about 1.4 GiB of commit** (library imports) for the whole
+  stage. The preflight already counts it.
+- **After every fold,** `prepay experiment verify --unsealed` runs in its own process. It
+  checks coherent probabilities, bit-identical reload, rate-level invariance, monotone hazards
+  and derived-feature parity.
+  - The fold passes only if the verifier exits 0 and writes a well-formed report for that run.
+  - The report must hold every mandatory check, and none may fail.
+  - Anything else stops the queue (exit 8). That includes a crash, a missing or malformed
+    report, and a missing check.
+  - Only the names of failed checks reach the ledger.
+- **To stop before the next job,** create the empty file `<out>/STOP`. Don't close the terminal
+  to stop E01: on Windows its child processes keep running. To stop at once, end the whole
+  process tree (`taskkill /T /F /PID <pid of e01 run>`). Only one `e01 run` may use a directory:
+  it holds `<out>/.e01-run.lock`, and a run stopped by force leaves it behind. Delete it only
+  after checking that no E01 process is running.
+- **After a pilot identity mismatch (exit 5),** investigate first. To continue anyway, the owner
+  records a written reason with `--waive-reproduction-mismatch "<reason>"`. The ledger and the
+  summary keep that reason.
+- **A fold above the projection (exit 7)** needs an owner decision. Rerun with
+  `--accept-projection` only on an otherwise idle host.
+
+| Output under `<out>` | Content | Who reads it |
+|---|---|---|
+| `ledger.json` | Jobs, times, exit codes, memory, projections, execution identity (digests), identity booleans, failed check names | metadata; the agent may read it |
+| `folds/<run>/evaluations/e01.json` | A fold's measures | owner only |
+| `stability/` | S1 replicate runs and reports | owner only |
+| `e01-summary.json` | Every comparison classified; R1–R7 | owner only |
+| `e01-report.md` | The local, deterministic reading of the summary | owner only; never uploaded or published |
+
+`prepay experiment e01 summarize --out <out>` rebuilds the summary and the report at any time.

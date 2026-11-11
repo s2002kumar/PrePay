@@ -24,6 +24,7 @@ bug.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -119,9 +120,18 @@ def _level_shift(batch: PanelBatch) -> PanelBatch:
 
 
 def verify_run(
-    run_dir: Path, data_root: Path, lock: DataLock, *, preset_name: str | None = None
+    run_dir: Path,
+    data_root: Path,
+    lock: DataLock,
+    *,
+    preset_name: str | None = None,
+    require_seal: bool = True,
 ) -> dict[str, Any]:
-    """Boolean implementation checks for one experiment run."""
+    """Boolean implementation checks for one experiment run.
+
+    ``require_seal=False`` omits the seal check for runs that are never sealed by design (E01
+    folds, ADR 0014); every other check is unchanged.
+    """
     from prepay.evaluation.forward import monotonicity
 
     manifest = read_json(run_dir / MANIFEST)
@@ -141,13 +151,13 @@ def verify_run(
             if name != "train"
         ) and manifest["windows"]["train"]["last"] == periods.to_iso(windows["train"].last)
         checks["preset_models_match"] = list(manifest["models"]) == list(expected.models)
-    if (run_dir / SEAL).is_file():
+    if require_seal and (run_dir / SEAL).is_file():
         try:
             load_seal(run_dir)
             checks["seal_intact"] = True
         except SealError:
             checks["seal_intact"] = False
-    else:
+    elif require_seal:
         checks["seal_intact"] = False
 
     with duckdb.connect(str(warehouse_path(data_root)), read_only=True) as con:
@@ -221,9 +231,40 @@ def verify_run(
         "kind": "prepay-run-verification",
         "run_id": manifest.get("run_id"),
         "preset": preset_name,
+        "seal_required": require_seal,
         "checks": checks,
         "failed": failed,
         "properties": properties,
         "all_pass": not failed,
         "note": "boolean software invariants only; no metric, rate or distribution",
     }
+
+
+#: Checks :func:`verify_run` makes for every run when no preset or seal is asked for.
+BASE_CHECKS = (
+    "manifest_complete",
+    "experiment_kind",
+    "clean_code",
+    "trained_on_this_lock",
+    "sample_has_rows",
+    "derived_feature_parity",
+)
+
+
+def required_checks(models: Iterable[str]) -> set[str]:
+    """Every check :func:`verify_run` must report for a run of ``models`` (no preset, no seal).
+
+    E01 stops a fold whose report lacks one of them, so a check that silently didn't run can't
+    pass (Gate B review).
+    """
+    names = set(BASE_CHECKS)
+    for name in models:
+        names |= {f"{name}.reload_identical", f"{name}.coherent"}
+        hazard = name in VARIANTS or name == ConstrainedHazard.family
+        if hazard:
+            names |= {f"{name}.level_invariant", f"{name}.hazard_monotone_incentive"}
+        if name == ConstrainedHazard.family or (
+            name in VARIANTS and "burnout_months" in VARIANTS[name].payoff_monotone
+        ):
+            names.add(f"{name}.hazard_monotone_burnout")
+    return names

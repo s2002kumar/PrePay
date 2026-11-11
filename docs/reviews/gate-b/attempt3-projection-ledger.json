@@ -1,0 +1,109 @@
+{
+  "adr": "0014",
+  "created_utc": "2026-11-10T00:47:46+00:00",
+  "data_lock_fingerprint": "9164d1b8960b622a9387d911c2daf96e7a86a4117f72f6e33e3ac3db26d6f400",
+  "experiment": "E01",
+  "jobs": [
+    {
+      "finished_utc": "2026-11-10T00:47:46+00:00",
+      "free_commit_before_bytes": 9001758720,
+      "job": "fold 2007-12",
+      "outcome": "preflight_failed",
+      "started_utc": "2026-11-10T00:47:46+00:00"
+    },
+    {
+      "exit_code": 0,
+      "finished_utc": "2026-11-10T00:54:00+00:00",
+      "free_commit_before_bytes": 8961593344,
+      "job": "fold 2007-12",
+      "job_peak_bytes": 1994100736,
+      "outcome": "ok",
+      "peak_commit_bytes": 1994100736,
+      "peak_rss_bytes": 542461952,
+      "reproduction": {
+        "compared_files": 15,
+        "differing_files": [],
+        "identical": true,
+        "reference_run_id": "20261110T003423Z-V1-2007-12-1e88b315"
+      },
+      "run_id": "20261110T004838Z-E01-2007-12-601600bf",
+      "seconds": 363.0,
+      "start_commit_bytes": 13316096,
+      "started_utc": "2026-11-10T00:47:47+00:00",
+      "verification": {
+        "exit_code": 0,
+        "failed_checks": [],
+        "gating_failures": []
+      },
+      "within_budget": true
+    },
+    {
+      "finished_utc": "2026-11-10T00:54:01+00:00",
+      "job": "summary",
+      "outcome": "ok"
+    },
+    {
+      "exit_code": 0,
+      "finished_utc": "2026-11-10T01:02:44+00:00",
+      "free_commit_before_bytes": 8973541376,
+      "job": "fold 2009-12",
+      "job_peak_bytes": 2015023104,
+      "outcome": "ok",
+      "peak_commit_bytes": 2015023104,
+      "peak_rss_bytes": 572370944,
+      "projected_peak_bytes": 5899691858,
+      "run_id": "20261110T005625Z-E01-2009-12-a887c07a",
+      "seconds": 509.2,
+      "start_commit_bytes": 13312000,
+      "started_utc": "2026-11-10T00:54:03+00:00",
+      "verification": {
+        "exit_code": 0,
+        "failed_checks": [],
+        "gating_failures": []
+      },
+      "within_budget": true
+    },
+    {
+      "finished_utc": "2026-11-10T01:02:44+00:00",
+      "free_commit_before_bytes": 8942895104,
+      "job": "fold 2011-12",
+      "outcome": "projection_above_budget",
+      "projected_peak_bytes": 10900572423,
+      "started_utc": "2026-11-10T01:02:44+00:00"
+    }
+  ],
+  "kind": "prepay-e01-ledger",
+  "note": "metadata only: times, exit codes, memory, projections and identity booleans",
+  "runs": [
+    {
+      "budget_bytes": 10737418240,
+      "git_sha": "2d8fa061e4f929a3be5889c758bd99300d6effbc",
+      "min_free_commit_bytes": 12884901888,
+      "stage": "pilot",
+      "started_utc": "2026-11-10T00:47:46+00:00"
+    },
+    {
+      "budget_bytes": 10737418240,
+      "git_sha": "2d8fa061e4f929a3be5889c758bd99300d6effbc",
+      "min_free_commit_bytes": 4294967296,
+      "stage": "pilot",
+      "started_utc": "2026-11-10T00:47:47+00:00"
+    },
+    {
+      "budget_bytes": 10737418240,
+      "git_sha": "2d8fa061e4f929a3be5889c758bd99300d6effbc",
+      "min_free_commit_bytes": 4294967296,
+      "stage": "folds",
+      "started_utc": "2026-11-10T00:54:03+00:00"
+    },
+    {
+      "budget_bytes": 10737418240,
+      "git_sha": "2d8fa061e4f929a3be5889c758bd99300d6effbc",
+      "min_free_commit_bytes": 4294967296,
+      "stage": "stability",
+      "started_utc": "2026-11-10T01:02:46+00:00"
+    }
+  ],
+  "synthetic": true,
+  "waiver": null
+}
