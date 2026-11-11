@@ -461,16 +461,20 @@ def _cmd_experiment_verify(args: argparse.Namespace) -> int:
     from prepay.io import write_json_atomic
     from prepay.modeling.verify import verify_run
 
+    lock = read_lock(Path(args.lock))
+    if args.synthetic_allow_dirty and not lock.synthetic:
+        raise ValueError("--synthetic-allow-dirty is refused for a real-data lock")
     report = verify_run(
         Path(args.run),
         Path(args.data_root),
-        read_lock(Path(args.lock)),
+        lock,
         preset_name=args.preset,
         require_seal=not args.unsealed,
     )
     write_json_atomic(Path(args.out), report)
     _emit({"out": args.out, "all_pass": report["all_pass"], "failed": report["failed"]})
-    return 0 if report["all_pass"] else 2
+    tolerated = {"clean_code"} if args.synthetic_allow_dirty else set()
+    return 0 if set(report["failed"]) <= tolerated else 2
 
 
 def _cmd_fingerprint(args: argparse.Namespace) -> int:
@@ -890,6 +894,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="omit the seal check, for runs never sealed by design (E01 folds)",
     )
+    exp_verify.add_argument(
+        "--synthetic-allow-dirty",
+        action="store_true",
+        help="synthetic locks only: a dirty worktree is still reported as failed 'clean_code' "
+        "but doesn't set exit code 2 (E01 tests and dry runs); refused for real data",
+    )
     exp_verify.set_defaults(handler=_cmd_experiment_verify)
     exp_roll = experiment_sub.add_parser(
         "rolling-origin",
@@ -920,8 +930,9 @@ def build_parser() -> argparse.ArgumentParser:
             "ledger. Stops on the STOP file, a failed preflight, a failure, a peak above the "
             "budget, a projection above it, or a pilot whose model files differ from the V1 "
             "run. Exit codes: 0 done, 1 job failed, 3 preflight, 4 budget, 5 reproduction, "
-            "6 STOP file, 7 projection, 8 verification. Real data: run 'pilot' first, then "
-            "'folds' and 'stability'; 'all' is for synthetic data only."
+            "6 STOP file, 7 projection, 8 verification, 9 execution identity changed. The "
+            "budget is checked when each child exits; no hard process limit is set. Real data: "
+            "run 'pilot' first, then 'folds' and 'stability'; 'all' is for synthetic data only."
         ),
     )
     e01_run.add_argument("--stage", required=True, choices=["pilot", "folds", "stability", "all"])

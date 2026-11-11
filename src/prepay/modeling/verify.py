@@ -24,6 +24,7 @@ bug.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -237,3 +238,33 @@ def verify_run(
         "all_pass": not failed,
         "note": "boolean software invariants only; no metric, rate or distribution",
     }
+
+
+#: Checks :func:`verify_run` makes for every run when no preset or seal is asked for.
+BASE_CHECKS = (
+    "manifest_complete",
+    "experiment_kind",
+    "clean_code",
+    "trained_on_this_lock",
+    "sample_has_rows",
+    "derived_feature_parity",
+)
+
+
+def required_checks(models: Iterable[str]) -> set[str]:
+    """Every check :func:`verify_run` must report for a run of ``models`` (no preset, no seal).
+
+    E01 stops a fold whose report lacks one of them, so a check that silently didn't run can't
+    pass (Gate B review).
+    """
+    names = set(BASE_CHECKS)
+    for name in models:
+        names |= {f"{name}.reload_identical", f"{name}.coherent"}
+        hazard = name in VARIANTS or name == ConstrainedHazard.family
+        if hazard:
+            names |= {f"{name}.level_invariant", f"{name}.hazard_monotone_incentive"}
+        if name == ConstrainedHazard.family or (
+            name in VARIANTS and "burnout_months" in VARIANTS[name].payoff_monotone
+        ):
+            names.add(f"{name}.hazard_monotone_burnout")
+    return names

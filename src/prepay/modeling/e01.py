@@ -48,7 +48,7 @@ from prepay.evaluation.simultaneous import (
     simultaneous,
     two_way_suite,
 )
-from prepay.features.derived import augment
+from prepay.features.derived import DERIVED_VERSION, augment
 from prepay.features.panel import rate_path_from_warehouse
 from prepay.ingest.lock import DataLock
 from prepay.io import read_json, write_json_atomic
@@ -67,6 +67,12 @@ from prepay.modeling.lockbox import read_only
 from prepay.modeling.probes import probe_models
 from prepay.modeling.registry import MANIFEST
 from prepay.modeling.windows import Window, read_window
+from prepay.provenance import (
+    canonical_digest,
+    feature_contract_digest,
+    git_sha,
+    software_lock_digest,
+)
 from prepay.reliability.support import SupportProfile
 from prepay.resources import StageRecorder
 from prepay.transform import warehouse_path
@@ -222,6 +228,74 @@ def stability_config(kind: str, cutoff_month: int, overrides: Overrides) -> Expe
         train_sample_fraction=overrides.train_sample_fraction,
     )
     return dataclasses.replace(config, **dict(overrides.config))
+
+
+# --------------------------------------------------------------------------- execution identity
+#: What one E01 execution is bound to (Gate B review, 2026-11-10). The pilot, the folds and S1
+#: share every field; a change of code, dependency lock, data lock, features or configuration
+#: starts a new E01 directory and a new pilot. Runs of different revisions are never mixed.
+IDENTITY_FIELDS = (
+    "git_sha",
+    "software_lock_digest",
+    "data_lock_fingerprint",
+    "feature_contract_digest",
+    "derived_feature_version",
+    "configuration_digest",
+)
+#: The identity fields that every run manifest records too.
+RUN_IDENTITY_FIELDS = IDENTITY_FIELDS[:-1]
+
+
+def protocol() -> dict[str, Any]:
+    """ADR 0014's fixed settings as data: origins, families, comparisons, margin, rules and S1."""
+    return {
+        "experiment": EXPERIMENT,
+        "adr": ADR,
+        "regime_shift": REGIME_SHIFT,
+        "control": CONTROL,
+        "families": FAMILIES,
+        "comparison_families": COMPARISON_FAMILIES,
+        "design_bundles": {f"{a} vs {b}": v for (a, b), v in DESIGN_BUNDLES.items()},
+        "margin_relative": MARGIN_RELATIVE,
+        "shift_majority": SHIFT_MAJORITY,
+        "s1": S1,
+        "seedless": SEEDLESS,
+        "blocking_d2_flags": BLOCKING_D2_FLAGS,
+        "probe_reference_fraction": PROBE_REFERENCE_FRACTION,
+        "bootstrap": {"seed": SEED, "family_alpha": FAMILY_ALPHA},
+    }
+
+
+def execution_identity(lock: DataLock, overrides: Overrides) -> dict[str, Any]:
+    """The identity an E01 execution would have now.
+
+    ``configuration_digest`` covers the protocol, the overrides, and every fold and S1
+    configuration, so a protocol edit changes the identity even in a synthetic test's dirty tree.
+    """
+    cutoff = periods.parse_iso(lock.performance_cutoff_month)
+    configuration = {
+        "protocol": protocol(),
+        "overrides": dataclasses.asdict(overrides),
+        "folds": {o: dataclasses.asdict(fold_config(o, overrides)) for o in overrides.origins},
+        "stability": {k: dataclasses.asdict(stability_config(k, cutoff, overrides)) for k in S1},
+    }
+    return {
+        "git_sha": git_sha(),
+        "software_lock_digest": software_lock_digest(),
+        "data_lock_fingerprint": lock.fingerprint(),
+        "feature_contract_digest": feature_contract_digest(),
+        "derived_feature_version": DERIVED_VERSION,
+        "configuration_digest": canonical_digest(configuration),
+    }
+
+
+def identity_digest(identity: Mapping[str, Any]) -> str:
+    return canonical_digest({k: identity.get(k) for k in IDENTITY_FIELDS})
+
+
+def identity_mismatches(provenance: Mapping[str, Any], identity: Mapping[str, Any]) -> list[str]:
+    """The identity fields in which a run's recorded provenance differs from ``identity``."""
+    return [k for k in RUN_IDENTITY_FIELDS if provenance.get(k) != identity.get(k)]
 
 
 # --------------------------------------------------------------------------- fold job
@@ -529,7 +603,10 @@ def summarize(
     ``origins`` are the run's declared folds: all six for real data (a synthetic test world may
     declare fewer). Each family's Bonferroni size counts its comparisons over every declared
     fold, whether or not the fold has finished, so the intervals don't widen as folds arrive.
+
+    With a ledger, every fold and S1 run must have the ledger's execution identity.
     """
+    _check_run_identities(root, ledger)
     folds = {o: r for o, r in _fold_reports(root).items() if o in origins}
     stability = _stability_reports(root)
     sds = _stability_sd(stability)
@@ -836,10 +913,28 @@ def _r7(
     }
 
 
+def _check_run_identities(root: Path, ledger: Mapping[str, Any] | None) -> None:
+    """Refuse to summarize runs made under another execution identity than the ledger's."""
+    identity = (ledger or {}).get("identity")
+    if identity is None:
+        return
+    foreign = [
+        str(report["run_id"])
+        for report in _fold_reports(root).values()
+        if identity_mismatches(report["provenance"], identity)
+    ]
+    base = stability_dir(root)
+    runs = sorted(p for p in base.iterdir() if (p / MANIFEST).is_file()) if base.is_dir() else []
+    foreign += [p.name for p in runs if identity_mismatches(read_json(p / MANIFEST), identity)]
+    if foreign:
+        raise E01Error(f"runs of another execution identity can't be summarized: {foreign}")
+
+
 def _ledger_digest(ledger: Mapping[str, Any] | None) -> dict[str, Any] | None:
     if not ledger:
         return None
     return {
+        "identity_digest": ledger.get("identity_digest"),
         "reproduction": next(
             (j.get("reproduction") for j in ledger.get("jobs", []) if j.get("reproduction")),
             None,

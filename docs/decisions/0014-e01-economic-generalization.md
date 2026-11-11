@@ -408,3 +408,52 @@ precise. None changes a family, measure, interval, class, margin or reading rule
    payoff probability `(1 − c) h`. This is the known property of ADR 0010 amendment 2. R7
    lists it under "D2 flags to explain" and leaves the explanation to the owner. It is not
    treated as explained automatically.
+
+## 15. Gate B owner review (2026-11-10): fail-closed corrections and the Gate C decision
+
+The owner approved §14 and accepted Gate B in principle. They asked for three fail-closed
+corrections before merge and before any private job. None changes a family, grid, window, rule,
+margin, comparison family, the sealed primary evaluation or the forward protocol.
+
+1. **Verification.** A fold passes only if all of these hold:
+   - the verifier child exits 0;
+   - it writes a well-formed report, for that run;
+   - the report holds every mandatory check of the fold's families;
+   - none of those checks failed.
+
+   Anything else stops the queue (exit 8): a nonzero exit with no failed check, a missing,
+   malformed or foreign report, or an absent check. The verifier child also passes the STOP
+   file, the preflight and the budget like every job. Synthetic data may tolerate a dirty tree
+   (`clean_code`) through an explicit verifier flag, which real data refuses.
+2. **One execution identity per E01 directory.** It is the Git commit, the dependency lock
+   (`uv.lock`), the data lock, the feature definitions (contract digest and derived-feature
+   version) and a digest of the whole E01 configuration. The configuration digest covers the
+   protocol, every fold and S1 configuration, and the overrides.
+   - The ledger records the identity at the first stage.
+   - A later stage under another identity is refused before any job runs.
+   - A change while a stage runs stops the queue after the current job (exit 9).
+   - Every job record carries the identity's digest. The folds need a pilot record of that
+     identity whose run still exists and matches it; S1 needs every fold of that identity.
+   - The summary refuses runs of another identity.
+   - Real data also needs a clean worktree at a known commit.
+3. **Resources.**
+   - On real data, a host that gives no free-commit reading fails the preflight.
+   - The 10 GiB budget is **checked when each child exits**: no hard process limit is set. The
+     preflight and the fold projection are what keep a job from starting into the budget.
+   - A job or verification whose peak wasn't measured stops the queue.
+
+The X1–X3 incentive ICE flags stay visible under R7, with no automatic explanation or waiver.
+
+**Gate C decision.** The owner conditionally approved a **single** real-data reproduction pilot,
+fold 2007-12, after these corrections are merged and once the host has at least 12 GiB of free
+commit. The conditions:
+- one clean, pinned research revision;
+- the exact data and model configurations;
+- byte identity with the V1 run, or stop and investigate;
+- a peak commit within the 10 GiB budget;
+- every mandatory implementation check passing;
+- private outputs staying private;
+- the host staying awake.
+
+The other five folds and S1 wait for the Gate D review. The agent receives only the
+metadata-only ledger: identity, resources and failed-check names.

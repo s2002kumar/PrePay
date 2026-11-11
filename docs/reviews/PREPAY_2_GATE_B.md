@@ -207,3 +207,24 @@ bit-identical. The comparison excludes only the stage memory labels.
   - The orchestrator itself holds about 1.4 GiB, which the preflight already counts. It could
     be slimmed in a follow-up.
 - **Decision.** If the pilot passes, the owner decides on Gate D: the other folds, then S1.
+
+## 9. Owner review corrections (2026-11-10)
+
+The owner accepted Gate B in principle and asked for three fail-closed corrections before merge
+(ADR 0014 §15). Each has focused regression tests. A mutation check, below, shows four of
+them failing with their fix undone.
+
+| Defect in the reviewed code | Correction | Regression tests |
+|---|---|---|
+| The verifier's exit code was recorded but not gated: an exit 2 or a crash with an empty `failed` list passed. A malformed report raised an exception instead of a recorded stop | Any nonzero exit, missing, malformed or foreign report, failed check, or absent mandatory check stops the queue (exit 8). Mandatory checks come from `verify.required_checks`. A synthetic dirty tree is tolerated only through the verifier's explicit `--synthetic-allow-dirty`, which real data refuses | `test_every_verifier_failure_stops_the_queue` (7 cases); `test_real_verifier_reports_hold_every_mandatory_check`; `test_orchestrator_stops_…` (now expects `verifier_exit_nonzero`) |
+| The verifier child skipped the STOP file, the preflight and the budget | It passes them like every job, and its peak is recorded | `test_the_verifier_passes_the_same_gates_as_every_job` |
+| The folds accepted any pilot record in the ledger. Nothing bound the pilot, the folds and S1 to one revision | The ledger records an execution identity (commit, `uv.lock`, data lock, feature digests, configuration digest); every stage, job and run must match it | `test_stage_transitions_refuse_another_execution_identity` (pilot→folds: commit, features, configuration; folds→S1: dependency lock, derived features); `test_records_and_runs_of_another_identity_are_never_used` (S1 before folds, a checkout during a stage, an edited record, a missing pilot run, a foreign summary) |
+| A real-data host without a free-commit reading passed the preflight. A resource report without a peak counted as 0 bytes, within budget | No reading on real data fails the preflight (`preflight_unavailable`). An unmeasured peak stops the queue (`budget_unverified`). The budget is documented as checked when each child exits | `test_budget_and_preflight_fail_closed_without_a_measurement`; `test_a_job_peak_is_commit_where_measured_and_none_when_unmeasured` |
+| A dirty worktree on real data was refused only inside the child | `check_options` refuses it before any job | `test_real_data_refuses_overrides_and_loosened_safeguards` |
+
+**Mutation check.** I undid four fixes together in a scratch copy and ran the four targeted
+tests: all four failed. The fixes undone were the nonzero-exit gate, the real-data preflight,
+the stage identity check and the verifier's gate.
+
+I didn't repeat the full synthetic dry run, as the owner allowed. The end-to-end fixture still
+runs the real pilot and folds through the CLI, with real verifier children, and passes.

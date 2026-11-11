@@ -108,11 +108,16 @@ class StageRecorder:
         self._clock = now
 
 
-def job_peak_bytes(report: dict[str, object]) -> int:
-    """The memory figure a job is judged by: peak commit where measured, else peak RSS."""
-    commit = report.get("peak_commit_bytes")
-    value = commit if isinstance(commit, int) else report.get("peak_rss_bytes", 0)
-    return int(value) if isinstance(value, int) else 0
+def job_peak_bytes(report: dict[str, object]) -> int | None:
+    """The memory figure a job is judged by: peak commit where measured, else peak RSS.
+
+    ``None`` when the report has neither: a budget can't be confirmed from it, so it must not pass.
+    """
+    for key in ("peak_commit_bytes", "peak_rss_bytes"):
+        value = report.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            return value
+    return None
 
 
 def _proc_meminfo_available() -> int | None:

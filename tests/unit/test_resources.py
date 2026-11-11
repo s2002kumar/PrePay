@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from prepay.cli import main
-from prepay.resources import host_description, peak_rss_bytes
+from prepay.resources import host_description, job_peak_bytes, peak_rss_bytes
 
 
 def test_peak_rss_is_positive_and_grows_with_allocation() -> None:
@@ -98,3 +98,11 @@ def test_peak_commit_is_none_off_windows() -> None:
     from prepay.resources import peak_commit_bytes
 
     assert peak_commit_bytes() is None
+
+
+def test_a_job_peak_is_commit_where_measured_and_none_when_unmeasured() -> None:
+    """E01's budget check must not pass a report without a peak (Gate B review)."""
+    assert job_peak_bytes({"peak_commit_bytes": 7, "peak_rss_bytes": 5}) == 7
+    assert job_peak_bytes({"peak_commit_bytes": None, "peak_rss_bytes": 5}) == 5
+    for unmeasured in ({}, {"exit_code": 0}, {"peak_commit_bytes": True}, {"peak_rss_bytes": 0}):
+        assert job_peak_bytes(unmeasured) is None
