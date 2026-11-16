@@ -34,7 +34,7 @@ from prepay.modeling.e01 import (
     run_fold,
     summarize,
 )
-from prepay.modeling.e01_report import PRIVATE_BANNER, SYNTHETIC_BANNER, render_report
+from prepay.modeling.e01_report import PRIVATE_BANNER, READING, SYNTHETIC_BANNER, render_report
 from prepay.modeling.experiment import (
     DEVELOPMENT_FAMILIES,
     MANIFEST,
@@ -219,6 +219,23 @@ def test_local_report_is_deterministic_and_labeled(e01_root: Path) -> None:
     assert PRIVATE_BANNER not in text
     assert "Development evidence (E1), exploratory" in text
     assert "not evidence of equivalence" in text
+    # ADR 0014 §9.6: every rule, flag and fold measure of the summary is rendered.
+    assert READING in text
+    assert "not prospective confirmation" in text
+    for heading in (
+        "**R1** (description",
+        "#### Calibration by predicted payoff",
+        "#### Economic diagnostics (D2 probes)",
+        "#### Run-off (cohort active at t0)",
+        "#### Tolerances",
+        "#### Payoff incidence attribution",
+        "## Provenance",
+        "## Definitions",
+    ):
+        assert text.count(heading) == (len(summary["folds"]) if "####" in heading else 1)
+    for candidate in summary["rules"]["R7_nomination"]["candidates"].values():
+        for reason in candidate["reasons"]:
+            assert reason in text  # shown as computed: never explained away or dropped
     # Byte-identical on every platform: no CRLF on Windows.
     assert (e01_root / e01.REPORT).read_bytes() == text.encode("utf-8")
     real = {**summary, "synthetic": False}

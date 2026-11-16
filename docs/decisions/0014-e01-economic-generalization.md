@@ -457,3 +457,38 @@ commit. The conditions:
 
 The other five folds and S1 wait for the Gate D review. The agent receives only the
 metadata-only ledger: identity, resources and failed-check names.
+
+## 16. Gate C result, Gate D, and report completeness (2026-11-16)
+
+**Gate C passed, and the owner accepted it on 2026-11-16.**
+- The private pilot, fold 2007-12, ran on 2026-11-15 from the clean checkout at `95efdc8`.
+- Its model and preprocessor artifacts were byte-identical to the V1 2007-12 run (15 of 15
+  files), with no waiver.
+- The mandatory verifier passed with no failed check.
+- Peak commit was 6.36 GiB for the job and 3.36 GiB for the verifier.
+- The agent saw only the ledger.
+
+**Gate D is authorized.** It covers:
+- the five remaining folds, in order, then S1, under the same execution identity
+  (`8c06e10b…`), with every gate of §15;
+- no waiver, no `--accept-projection`, and no change to samples, parameters or the protocol;
+- the owner-only report after S1. The owner then reviews the results before any further
+  modeling or frontend work.
+
+**Report completeness: the rendering changes, not the reading.**
+- **The gap.** The `95efdc8` renderer showed only part of `e01-summary.json`. It omitted R1,
+  R7's reasons (which carry the D2 flags), the D2 probe flags themselves, the fifths, the
+  run-off errors, T1–T6 and the payoff-incidence attribution. That fell short of §9.6 (every
+  predefined metric, class and flag in fixed wording) and of §15 (the X1–X3 incentive ICE flags
+  stay visible under R7).
+- **The fix touches only `e01_report.py`.**
+  - It renders those fields, in pre-registered orders, with fixed definitions.
+  - It shows R7's reasons verbatim and puts every raised blocking flag in bold.
+  - It states before any number that E01 is exploratory development evidence, not prospective
+    confirmation.
+- **What stays unchanged:** the summary computation, every rule, every class, every run and the
+  execution identity.
+- **Re-rendering.** The `95efdc8` stages still write their own rendering. After S1 the owner's
+  report is re-rendered from the same directory by `prepay experiment e01 summarize` at the
+  fixing commit, as runbook §10 describes. The 95efdc8 rendering is kept, and the rebuilt
+  summary must be byte-identical to the one the stages wrote.

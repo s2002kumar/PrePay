@@ -348,3 +348,13 @@ uv run --frozen prepay experiment e01 run --stage stability --data-root <data-ro
 | `e01-report.md` | The local, deterministic reading of the summary | owner only; never uploaded or published |
 
 `prepay experiment e01 summarize --out <out>` rebuilds the summary and the report at any time.
+It reads the fold reports, the S1 reports and the ledger, never the data, and refuses runs of
+another execution identity. The report covers every rule (R1–R7, with R7's reasons and the D2
+flags they cite), each fold's calibration, D2 probes, run-off errors, T1–T6 tolerances and
+payoff-incidence attribution, and the provenance of every fold.
+
+To re-render a finished E01 directory with a newer report renderer (ADR 0014 §16):
+1. copy `e01-summary.json` and `e01-report.md` aside, under the run's commit in their names;
+2. run `summarize` from a clean checkout of the newer commit;
+3. check that the rebuilt `e01-summary.json` has the same SHA-256 as the copy. Only the report
+   may differ.
